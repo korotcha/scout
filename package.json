@@ -2,7 +2,9 @@
   "name": "scout-market-radar",
   "version": "0.53.1",
   "private": true,
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node scripts/unpack.mjs && next dev",
     "build": "node scripts/unpack.mjs && next build",
