@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { unzipSync } from "fflate";
 
@@ -18,6 +18,28 @@ function extract(zipBytes, prefix = "", skipPackage = false) {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, data);
   }
+}
+
+function stripTsImportExtensions(dir) {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) {
+      if (name !== "node_modules" && name !== ".next" && name !== "bundle") stripTsImportExtensions(full);
+      continue;
+    }
+    if (!/\.(ts|tsx|mts|cts)$/.test(name)) continue;
+    let text = readFileSync(full, "utf8");
+    text = text.replace(/(['"])(\.\.?\/[^'"]+?)\.ts\1/g, "$1$2$1");
+    writeFileSync(full, text);
+  }
+}
+
+function awaitImportFs() {
+  return globalThis.__scoutFs ??= (() => {
+    const fs = require("node:fs");
+    return { readdirSync: fs.readdirSync, statSync: fs.statSync };
+  })();
 }
 
 function replaceInFile(rel, replacements) {
@@ -59,4 +81,5 @@ replaceInFile("app/api/uploads/route.ts", [
   ["new Response(object.body,", "new Response(new Uint8Array(object.body),"],
 ]);
 
-console.log("SCOUT v53 source restored + Vercel/Neon overlay");
+stripTsImportExtensions(root);
+console.log("SCOUT v53 source restored + Vercel/Neon overlay + normalized TS imports");
