@@ -81,5 +81,9 @@ replaceInFile("app/api/uploads/route.ts", [
   ["new Response(object.body,", "new Response(new Uint8Array(object.body),"],
 ]);
 
+replaceInFile("lib/object-store.ts", [
+  ['crypto.subtle.digest("SHA-256", data)', 'crypto.subtle.digest("SHA-256", new Uint8Array(data).buffer)'],
+]);
+
 stripTsImportExtensions(root);
 console.log("SCOUT v53 source restored + Vercel/Neon overlay + normalized TS imports");
