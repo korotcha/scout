@@ -20,6 +20,13 @@ function extract(zipBytes, prefix = "", skipPackage = false) {
   }
 }
 
+function replaceInFile(rel, replacements) {
+  const path = join(root, rel);
+  let text = readFileSync(path, "utf8");
+  for (const [from, to] of replacements) text = text.split(from).join(to);
+  writeFileSync(path, text);
+}
+
 extract(
   readFileSync(join(root, "bundle", "market-radar-v53-deploy-source.zip")),
   "market-radar-v53/",
@@ -31,4 +38,17 @@ const overlayB64 = [0, 1, 2, 3, 4]
   .join("");
 
 extract(Buffer.from(overlayB64, "base64"));
+
+const secretFallbacks = [
+  ["process.env.INTEGRATION_ENCRYPTION_KEY ?? ''", "(process.env.INTEGRATION_ENCRYPTION_KEY ?? process.env.SCOUT_PASSWORD ?? '')"],
+  ['process.env.INTEGRATION_ENCRYPTION_KEY ?? ""', '(process.env.INTEGRATION_ENCRYPTION_KEY ?? process.env.SCOUT_PASSWORD ?? "")'],
+  ['process.env.INTEGRATION_ENCRYPTION_KEY??""', '(process.env.INTEGRATION_ENCRYPTION_KEY??process.env.SCOUT_PASSWORD??"")'],
+];
+for (const rel of [
+  "app/api/search-demand/route.ts",
+  "app/api/query-competitors/route.ts",
+  "app/api/query-analysis/route.ts",
+  "app/api/connections/route.ts",
+]) replaceInFile(rel, secretFallbacks);
+
 console.log("SCOUT v53 source restored + Vercel/Neon overlay");
