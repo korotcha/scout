@@ -55,4 +55,8 @@ replaceInFile("app/api/research-report/route.ts", [
   ["new Response(object.body,", "new Response(new Uint8Array(object.body),"],
 ]);
 
+replaceInFile("app/api/uploads/route.ts", [
+  ["new Response(object.body,", "new Response(new Uint8Array(object.body),"],
+]);
+
 console.log("SCOUT v53 source restored + Vercel/Neon overlay");
