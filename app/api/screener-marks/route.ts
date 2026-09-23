@@ -51,17 +51,17 @@ export async function POST(request:Request){
     // Candidate trigger mirrors status changes back into screener_marks. Update the
     // candidate first, then delete the mark so «Не разобрано» is the final state.
     statements.push(db.prepare(`UPDATE candidates SET status='unreviewed',analysis_passed=0,revision=revision+1,updated_by=?,updated_at=?,
-     history_json=(history_json::jsonb || jsonb_build_array(jsonb_build_object('at',?,'actor',?,'action','reopen_analysis','status','unreviewed','revision',revision+1,'note','Возвращено в неразобранные')))::text
+     history_json=(history_json::jsonb || jsonb_build_array(jsonb_build_object('at',?::text,'actor',?::text,'action','reopen_analysis','status','unreviewed','revision',revision+1,'note','Возвращено в неразобранные')))::text
      WHERE context_key=? AND status<>'unreviewed' AND COALESCE((content_json::jsonb->>'manualBlock')::boolean,false)=false
      AND query_key IN (SELECT x.key FROM jsonb_to_recordset(?::jsonb) AS x(key text))`).bind(actor,at,at,actor,contextKey,chunk));
     statements.push(db.prepare("DELETE FROM screener_marks WHERE context_key = ? AND query_key IN (SELECT x.key FROM jsonb_to_recordset(?::jsonb) AS x(key text))").bind(contextKey,chunk));
    }else{
     statements.push(db.prepare(`INSERT INTO screener_marks (context_key,query_key,query,subject,status,updated_by,updated_at)
-     SELECT ?,x.key,x.query,x.subject,?,?,? FROM jsonb_to_recordset(?::jsonb) AS x(key text,query text,subject text)
+     SELECT ?::text,x.key,x.query,x.subject,?::text,?::text,?::text FROM jsonb_to_recordset(?::jsonb) AS x(key text,query text,subject text)
      ON CONFLICT(context_key,query_key) DO UPDATE SET query=excluded.query,subject=excluded.subject,status=excluded.status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(contextKey,status,actor,at,chunk));
    }
    if(status==="shortlisted")statements.push(db.prepare(`UPDATE candidates SET status='analysis',revision=revision+1,updated_by=?,updated_at=?,
-     history_json=(history_json::jsonb || jsonb_build_array(jsonb_build_object('at',?,'actor',?,'action','shortlist','status','analysis','revision',revision+1,'note','В чистовик')))::text
+     history_json=(history_json::jsonb || jsonb_build_array(jsonb_build_object('at',?::text,'actor',?::text,'action','shortlist','status','analysis','revision',revision+1,'note','В чистовик')))::text
      WHERE context_key=? AND status='unreviewed' AND COALESCE((content_json::jsonb->>'manualBlock')::boolean,false)=false
      AND query_key IN (SELECT x.key FROM jsonb_to_recordset(?::jsonb) AS x(key text))`).bind(actor,at,at,actor,contextKey,chunk));
   }
