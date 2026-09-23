@@ -1,0 +1,42 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {DatabaseSync} from "node:sqlite";
+import {readFileSync,readdirSync,mkdtempSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {pathToFileURL} from "node:url";
+import {build} from "esbuild";
+const db=new DatabaseSync(":memory:");
+for(const file of readdirSync(new URL("../drizzle/",import.meta.url)).filter(f=>f.endsWith(".sql")).sort())db.exec(readFileSync(new URL("../drizzle/"+file,import.meta.url),"utf8"));
+globalThis.__marksDb={prepare(sql){let values=[];const q={bind(...v){values=v;return q;},async run(){return db.prepare(sql).run(...values);},async all(){return {results:db.prepare(sql).all(...values)};}};return q;}};
+const dir=mkdtempSync(join(tmpdir(),"marks-api-"));
+globalThis.__marksDb.batch=async statements=>{db.exec("BEGIN");try{const result=[];for(const statement of statements)result.push(await statement.run());db.exec("COMMIT");return result;}catch(e){db.exec("ROLLBACK");throw e;}};
+await build({entryPoints:[new URL("../app/api/screener-marks/route.ts",import.meta.url).pathname],outfile:join(dir,"route.mjs"),bundle:true,platform:"node",format:"esm",logLevel:"silent",plugins:[{name:"db",setup(b){b.onResolve({filter:/^@\/db$/},()=>({path:"db",namespace:"fake"}));b.onLoad({filter:/.*/,namespace:"fake"},()=>({contents:"export const getRawDb=()=>globalThis.__marksDb",loader:"js"}));}}]});
+const api=await import(pathToFileURL(join(dir,"route.mjs")).href);
+const request=(data,headers={})=>new Request("https://app.test/api/screener-marks",{method:"POST",headers:{"oai-authenticated-user-email":"owner@example.test",...headers},body:JSON.stringify(data)});
+const row=query=>({query,subject:"Кофемашины"});
+const write=(rows,status="shortlisted",contextKey="month:2027-03")=>api.POST(request({rows,status,contextKey}));
+async function read(context="month:2027-03",after=0){return (await api.GET(new Request("https://app.test/api/screener-marks?context="+context+"&after="+after,{headers:{"oai-authenticated-user-email":"owner@example.test"}}))).json();}
+test("bulk selection persists across pages, query changes are reversible and isolated by month",async()=>{
+ const rows=Array.from({length:1200},(_,i)=>row("кофемашина "+i));
+ assert.equal((await write(rows)).status,200);
+ const first=await read();assert.equal(first.marks.length,1000);assert.ok(first.nextAfter);
+ const second=await read("month:2027-03",first.nextAfter);assert.equal(second.marks.length,200);assert.equal(second.nextAfter,null);
+ await write([rows[0]],"excluded","month:2027-04");
+ await write([row("  КОФЕМАШИНА 0  "),rows[1]],"excluded");
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM screener_marks WHERE context_key='month:2027-03'").get().n,1200);
+ assert.equal((await read()).marks.filter(m=>m.status==="excluded").length,2);
+ await write([rows[0]],"unmarked");
+ assert.equal((await read("month:2027-04")).marks[0].status,"excluded");
+ assert.equal((await read()).marks.some(m=>m.queryKey==="кофемашина 0"),false);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM candidates").get().n,0,"screening marks never create or change detailed analyses");
+});
+test("auth, origin and validation protect the entire batch",async()=>{
+ const data={contextKey:"month:2027-03",rows:[row("новый")],status:"shortlisted"};
+ assert.equal((await api.POST(request(data,{"oai-authenticated-user-email":""}))).status,401);
+ assert.equal((await api.POST(request(data,{origin:"https://other.test"}))).status,403);
+ assert.equal((await api.POST(request({...data,rows:[row("новый"),row("")]}))).status,400);
+ assert.equal((await api.POST(request({...data,status:"purchased"}))).status,400);
+ assert.equal((await api.POST(request({...data,contextKey:"month:2027-13"}))).status,400);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM screener_marks WHERE query_key='новый'").get().n,0);
+});

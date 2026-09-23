@@ -1,0 +1,9 @@
+"use client";
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+export function QuickReject({ onReject, disabled = false }: { onReject: (reason: string) => Promise<boolean | void>; disabled?: boolean }) {
+ const [open, setOpen] = useState(false), [reason, setReason] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""); const id = useId();
+ return <Dialog open={open} onOpenChange={v => { if (!busy) { setOpen(v); setError(""); } }}><DialogTrigger asChild><Button type="button" variant="outline" disabled={disabled} className="text-red-700">Отклонить по чеку</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Низкий чек в выдаче</DialogTitle><DialogDescription>Можно завершить отбор сразу, без группы и топ-10. Запрос сохранится в отклонённых кандидатах с вашей причиной.</DialogDescription></DialogHeader><label htmlFor={id}>Причина отклонения *</label><Textarea id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Например: релевантные товары в выдаче стоят 500–700 ₽." aria-invalid={!!error} />{error && <p role="alert" className="text-sm text-red-700">{error}</p>}<DialogFooter><Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>Отмена</Button><Button disabled={busy} onClick={async () => { if (!reason.trim()) { setError("Напишите причину отклонения"); return; } setBusy(true); try { if (await onReject(reason.trim()) !== false) { setOpen(false); setReason(""); } else setError("Не удалось отклонить. Проверьте сообщение в карточке."); } catch(e) { setError(e instanceof Error ? e.message : "Не удалось сохранить"); } finally { setBusy(false); } }}>Отклонить</Button></DialogFooter></DialogContent></Dialog>;
+}

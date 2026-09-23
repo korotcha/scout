@@ -1,0 +1,24 @@
+{
+  "buildLabel": "Market Radar v53 deploy source",
+  "createdAt": "2026-09-22",
+  "baseSiteVersion": 52,
+  "targetSiteVersion": 53,
+  "projectId": "appgprj_6a9a623e961881918664881468eb5d49",
+  "changes": [
+    "screener has exactly three manual statuses: unreviewed, clean-list, excluded",
+    "single and bulk moves to clean-list, excluded or unreviewed apply immediately without confirmation dialogs",
+    "clean-list rows show a derived three-step progress line: selected, manager analysis, owner decision",
+    "candidate/deferred outcomes remain downstream workflow results instead of new screener statuses",
+    "query detail uses the same three-status screener selector",
+    "Candidates + unit replaces the previous standalone unit-economics navigation label",
+    "purchase candidates auto-group by subject, with rename, drag-to-group, split and restore-by-subject controls",
+    "group organization changes preserve analysis, workflow status and unit calculations",
+    "seasonal-wave peak detection and resumable MPStats analysis from v52 are retained"
+  ],
+  "validation": {
+    "typescriptSyntax": "all modified TS/TSX modules transpile without syntax diagnostics",
+    "screenerStatusRegression": "passed: exactly 3 manual statuses and derived manager/owner progress states",
+    "searchDemandTests": "7/7 passed on the v52 base before these UI/workflow changes",
+    "fullProductionCompile": "not executed here because registry.npmjs.org is not resolvable from this sandbox"
+  }
+}

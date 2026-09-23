@@ -1,0 +1,42 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {DatabaseSync} from "node:sqlite";
+import {readFileSync,readdirSync,mkdtempSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {pathToFileURL} from "node:url";
+import {build} from "esbuild";
+const db=new DatabaseSync(":memory:");
+for(const file of readdirSync(new URL("../drizzle/",import.meta.url)).filter(f=>f.endsWith(".sql")).sort())db.exec(readFileSync(new URL("../drizzle/"+file,import.meta.url),"utf8"));
+globalThis.__exclusionsDb={prepare(sql){let values=[];const q={bind(...v){values=v;return q;},async run(){return db.prepare(sql).run(...values);},async all(){return {results:db.prepare(sql).all(...values)};}};return q;},async batch(statements){db.exec("BEGIN");try{for(const statement of statements)await statement.run();db.exec("COMMIT");}catch(e){db.exec("ROLLBACK");throw e;}}};
+const dir=mkdtempSync(join(tmpdir(),"exclusions-api-"));
+await build({entryPoints:[new URL("../app/api/exclusions/route.ts",import.meta.url).pathname],outfile:join(dir,"route.mjs"),bundle:true,platform:"node",format:"esm",logLevel:"silent",plugins:[{name:"db",setup(b){b.onResolve({filter:/^@\/db$/},()=>({path:"db",namespace:"fake"}));b.onLoad({filter:/.*/,namespace:"fake"},()=>({contents:"export const getRawDb=()=>globalThis.__exclusionsDb",loader:"js"}));}}]});
+const api=await import(pathToFileURL(join(dir,"route.mjs")).href);
+const headers={"oai-authenticated-user-email":"owner@example.test"};
+const request=(data,extra={})=>new Request("https://app.test/api/exclusions",{method:"POST",headers:{...headers,...extra},body:JSON.stringify(data)});
+test("bulk subject exclusions and legacy restore share one persisted list",async()=>{
+ const changes=Array.from({length:714},(_,i)=>({subject:"Предмет "+i,active:true}));
+ assert.equal((await api.POST(request({changes,reason:"Не рассматриваем"}))).status,200);
+ let response=await api.GET(new Request("https://app.test/api/exclusions",{headers}));
+ let data=await response.json();assert.equal(data.exclusions.length,714);assert.equal(data.exclusions[0].active,true);assert.equal(data.exclusions[0].reason,"Не рассматриваем");
+ const legacy=await api.POST(request({subject:"Предмет 0",active:false}));
+ assert.equal((await legacy.json()).exclusion.active,false);
+ await api.POST(request({changes:[{subject:"Предмет 1",active:false},{subject:"Предмет 2",active:false}]}));
+ data=await(await api.GET(new Request("https://app.test/api/exclusions",{headers}))).json();
+ assert.equal(data.exclusions.filter(s=>!s.active).length,3);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM candidates").get().n,0);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM screener_marks").get().n,0,"global rules never rewrite monthly screening marks");
+});
+test("invalid or unauthorized batches cannot change any subjects",async()=>{
+ const changes=[{subject:"Must stay absent",active:true}];
+ assert.equal((await api.POST(request({changes},{"oai-authenticated-user-email":""}))).status,401);
+ assert.equal((await api.POST(request({changes},{origin:"https://elsewhere.test"}))).status,403);
+ assert.equal((await api.POST(request({changes:[...changes,{subject:"",active:true}]}))).status,400);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM exclusions WHERE subject='Must stay absent'").get().n,0);
+});
+test("failure in a later chunk rolls back earlier subject changes",async()=>{
+ db.exec("CREATE TRIGGER fail_subject BEFORE INSERT ON exclusions WHEN NEW.subject='Reject write' BEGIN SELECT RAISE(ABORT,'fail'); END");
+ const changes=Array.from({length:500},(_,i)=>({subject:"Rollback "+i,active:true}));changes.push({subject:"Reject write",active:true});
+ assert.equal((await api.POST(request({changes}))).status,503);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM exclusions WHERE subject LIKE 'Rollback %'").get().n,0);
+});

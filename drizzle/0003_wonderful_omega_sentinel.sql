@@ -1,0 +1,1 @@
+ALTER TABLE `analysis_projects` ADD `launch_month` text;

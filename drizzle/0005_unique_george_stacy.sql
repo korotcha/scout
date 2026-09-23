@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `idx_candidates_context_query` ON `candidates` (`context_key`,`query_key`) WHERE "candidates"."query_key" <> '';
