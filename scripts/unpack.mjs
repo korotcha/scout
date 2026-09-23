@@ -55,7 +55,7 @@ extract(
   true,
 );
 
-const overlayB64 = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+const overlayB64 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   .map((i) => readFileSync(join(root, "bundle", `vercel-overrides.${String(i).padStart(2, "0")}`), "utf8"))
   .join("");
 
