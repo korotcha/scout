@@ -72,9 +72,14 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
   const selectedRows=[...new Map(selection.rows.filter(r=>selected.has(queryKey(r.query))).map(r=>[queryKey(r.query),r])).values()];
   async function mark(status:ScreeningMark|"unmarked"){
     const count=selectedRows.length;
+    const selectionSnapshot=new Set(selected);
+    if(!count)return;
+    setSelected(new Set());
     if(await screening.save(selectedRows,status)){
-      setSelected(new Set());onChanged();
+      onChanged();
       toast.success(status==="shortlisted"?`В чистовике: ${count}`:status==="excluded"?`Исключено: ${count}`:`Не разобрано: ${count}`);
+    }else{
+      setSelected(selectionSnapshot);
     }
   }
   async function changeStatus(subject:string,query:string,action:CandidateAction,reason:string,quiet=false){

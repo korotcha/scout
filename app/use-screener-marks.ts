@@ -16,9 +16,14 @@ export function useScreenerMarks(period:string,onSynchronized?:()=>void){
   })().catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});return()=>abort.abort();
  },[period,reload]);
  async function save(rows:SummaryRow[],status:ScreeningMark|"unmarked"){
-  if(busy||loading||!rows.length)return false;setBusy(true);setError("");
-  try{const response=await fetch("/api/screener-marks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contextKey:"month:"+period,status,rows:rows.map(({query,subject})=>({query,subject}))})});const data=await response.json() as {error?:string};if(!response.ok)throw new Error(data.error||"Не удалось сохранить отбор");setMarks(old=>{const next={...old};for(const row of rows){const key=queryKey(row.query);if(status==="unmarked")delete next[key];else next[key]=status;}return next;});return true;
-  }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить отбор");return false;}finally{setBusy(false);}
+  if(busy||loading||!rows.length)return false;
+  const previous={...marks};
+  const next={...marks};
+  for(const row of rows){const key=queryKey(row.query);if(status==="unmarked")delete next[key];else next[key]=status;}
+  setMarks(next);
+  setBusy(true);setError("");
+  try{const response=await fetch("/api/screener-marks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contextKey:"month:"+period,status,rows:rows.map(({query,subject})=>({query,subject}))})});const data=await response.json() as {error?:string};if(!response.ok)throw new Error(data.error||"Не удалось сохранить отбор");return true;
+  }catch(e){setMarks(previous);setError(e instanceof Error?e.message:"Не удалось сохранить отбор");return false;}finally{setBusy(false);}
  }
  function reflect(query:string,status:ScreeningMark){setMarks(old=>({...old,[queryKey(query)]:status}));}
  return {marks,loading,busy,error,save,reflect,retry:()=>setReload(v=>v+1)};

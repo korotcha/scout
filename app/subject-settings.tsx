@@ -42,15 +42,18 @@ export function SubjectSettings({ subjects, exclude, onClose, onApplied }: {
   const scope = exclude ? catalog.filter(s => exclude.includes(s.subject)) : catalog;
   const shown = scope.filter(s => (tab !== "excluded" || draft[s.subject]) && s.subject.toLocaleLowerCase("ru").includes(search.trim().toLocaleLowerCase("ru")));
   async function save() {
+    const pendingChanges = changes;
     setBusy(true); setError("");
+    onApplied(pendingChanges); onClose();
     try {
-      const response = await fetch("/api/exclusions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes, reason }) });
+      const response = await fetch("/api/exclusions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes: pendingChanges, reason }) });
       const body = await response.json() as { error?: string };
       if (!response.ok || body.error) throw new Error(body.error || "Не удалось сохранить");
-      onApplied(Object.entries(draft).map(([subject, active]) => ({ subject, active })));
-      toast.success(`Предметы обновлены: ${changes.length}`); onClose();
-    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сохранить"); }
-    finally { setBusy(false); }
+      toast.success(`Предметы обновлены: ${pendingChanges.length}`);
+    } catch (e) {
+      onApplied(pendingChanges.map(({ subject, active }) => ({ subject, active: !active })));
+      toast.error(e instanceof Error ? e.message : "Не удалось сохранить");
+    }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="subject-settings-dialog sm:max-w-2xl" showCloseButton={!busy}>
     <DialogHeader><DialogTitle>{exclude ? "Скрыть предметы целиком" : "Настройка предметов"}</DialogTitle><DialogDescription>Скрытые предметы не участвуют в скринере во всех месяцах. Данные и разборы сохраняются; предмет можно вернуть здесь.</DialogDescription></DialogHeader>

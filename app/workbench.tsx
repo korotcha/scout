@@ -301,7 +301,7 @@ export function Workbench() {
   }, []);
   useEffect(() => {
     const abort = new AbortController();
-    setCandidateState({ context: contextKey, rows: [], loading: true, error: "", canDecide: false });
+    setCandidateState((current) => ({ context: contextKey, rows: current.context === contextKey ? current.rows : [], loading: true, error: "", canDecide: current.context === contextKey ? current.canDecide : false }));
     (async () => {
       const loaded: Candidate[] = []; let offset: number | null = 0; let canDecide = false;
       while (offset != null) {
@@ -314,7 +314,7 @@ export function Workbench() {
         offset = next;
       }
       if (!abort.signal.aborted) setCandidateState({ context: contextKey, rows: [...new Map(loaded.map(c => [c.id, c])).values()], loading: false, error: "", canDecide });
-    })().catch((e) => { if (!abort.signal.aborted) setCandidateState({ context: contextKey, rows: [], loading: false, error: e.message, canDecide: false }); });
+    })().catch((e) => { if (!abort.signal.aborted) setCandidateState((current) => ({ ...current, context: contextKey, loading: false, error: e.message })); });
     return () => abort.abort();
   }, [contextKey, candidateReload]);
   useEffect(() => {
@@ -441,7 +441,7 @@ export function Workbench() {
         />
       )}
       {!sheetSubject && view === "screening" && !sourceAvailable && <div className="mx-auto max-w-4xl px-4 pb-28"><EmptyBlock title={`Для ${prettyMonth(launchMonth)} ещё нет рассчитанного свода`} copy="Загруженные файлы хранятся в общем архиве. Автоматическая сборка новых БД1 и БД2 в свод пока не подключена; данные другого периода здесь не подменяются."><Button variant="outline" onClick={() => changeView("uploads")}>Открыть базы данных</Button></EmptyBlock></div>}
-      {!sheetSubject && view === "screener" && <ScreenerView canDecide={candidateState.canDecide} onSaved={candidate=>setCandidateState(s=>s.context===contextKey?{...s,rows:[candidate,...s.rows.filter(c=>c.id!==candidate.id)]}:s)} key={contextKey} list={screenerList} onListChange={setScreenerList} launchPeriod={launchMonth} onChanged={() => setCandidateReload(x => x + 1)} subjects={subjectOptions} onSubjectsChanged={changes => { setExclusionOverrides(prev => ({ ...prev, ...Object.fromEntries(changes.map(s => [s.subject, s.active])) })); setExclusionsError(""); }} rows={sourceAvailable ? summaryRows : []} candidates={activeCandidates} loading={summaryLoading || candidatesLoading || exclusionsLoading} error={candidateState.error || summaryError || exclusionsError} onRetry={() => { setSummaryReload(x => x + 1); setCandidateReload(x => x + 1); void refreshServerState(); }} onOpen={(subject,query,excluded,shortlisted)=>openSubject(subject,query,null,excluded,shortlisted)} periods={summaryPeriods} state={screenerState} onChange={setScreenerState} />}
+      {!sheetSubject && view === "screener" && <ScreenerView canDecide={candidateState.canDecide} onSaved={candidate=>setCandidateState(s=>s.context===contextKey?{...s,rows:[candidate,...s.rows.filter(c=>c.id!==candidate.id)]}:s)} key={contextKey} list={screenerList} onListChange={setScreenerList} launchPeriod={launchMonth} onChanged={() => setCandidateReload(x => x + 1)} subjects={subjectOptions} onSubjectsChanged={changes => { setExclusionOverrides(prev => ({ ...prev, ...Object.fromEntries(changes.map(s => [s.subject, s.active])) })); setExclusionsError(""); }} rows={sourceAvailable ? summaryRows : []} candidates={activeCandidates} loading={summaryLoading || (candidatesLoading && !activeCandidates.length) || exclusionsLoading} error={candidateState.error || summaryError || exclusionsError} onRetry={() => { setSummaryReload(x => x + 1); setCandidateReload(x => x + 1); void refreshServerState(); }} onOpen={(subject,query,excluded,shortlisted)=>openSubject(subject,query,null,excluded,shortlisted)} periods={summaryPeriods} state={screenerState} onChange={setScreenerState} />}
       {!sheetSubject && view === "candidates" && <CandidatesList contextKey={contextKey} canDecide={candidateState.canDecide} onDirtyChange={dirtyChanged} onSaved={(candidate) => setCandidateState((s) => s.context === contextKey ? ({ ...s, rows: [candidate, ...s.rows.filter((c) => c.id !== candidate.id)] }) : s)} rows={activeCandidates} loading={candidatesLoading} error={candidateState.error} onRetry={() => setCandidateReload((x) => x + 1)} onOpen={(id) => { const c = activeCandidates.find(row => row.id === id); if (c) openSubject(c.subject, c.query, c.id); }} onScreener={() => changeView("screener")} />}
       {view === "uploads" && <UploadsView projects={projects} uploads={uploads} onChanged={refreshServerState} />}
       {view === "exclusions" && (
