@@ -1,7 +1,7 @@
 import type { Candidate } from "./candidate-workflow";
 
 export type QueryStatus = "unreviewed" | "shortlisted" | "deferred" | "candidate" | "excluded";
-export type QueryList = "all" | "shortlisted" | "excluded";
+export type QueryList = "all" | "unreviewed" | "shortlisted" | "excluded";
 export type ScreenerStatus = "unreviewed" | "shortlisted" | "excluded";
 
 export const queryStatusLabels: Record<QueryStatus, string> = {

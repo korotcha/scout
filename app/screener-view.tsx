@@ -1,6 +1,6 @@
 "use client";
 import { QueryDecision } from "./query-decision";
-import { reviewProgress, screenerStatus, screenerStatusLabels, type ScreenerStatus, type QueryList } from "@/lib/query-status";
+import { type QueryList } from "@/lib/query-status";
 import { SubjectSettings, type SubjectOption, type SubjectChange } from "./subject-settings";
 import { queryKey } from "@/lib/niche-research";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -10,7 +10,7 @@ import { analysisKey, selectWorkflowRows } from "@/lib/workflow-screener";
 import { useToday } from "./research-panel";
 
 import { useEffect, useId, useMemo, useState } from "react";
-import { Check, ChevronDown, Circle, Clock3, RotateCcw, Search, X } from "lucide-react";
+import { ChevronDown, RotateCcw, Search, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,30 +50,6 @@ function FilterControl({ definition, value, onChange, compact = false }: {
   </Popover>;
 }
 
-function ReviewPipeline({ candidate }: { candidate?: Candidate }) {
-  const progress = reviewProgress(candidate, true);
-  const steps = [
-    { label: "Отобран", state: progress.selected ? "done" : "waiting" },
-    { label: "Менеджер", state: progress.manager },
-    { label: "Решение", state: progress.owner },
-  ] as const;
-  const outcome = progress.outcome === "candidate" ? "Кандидат в закуп" : progress.outcome === "deferred" ? "Отложено" : progress.outcome === "excluded" ? "Исключено" : null;
-  return <div className="mt-1.5 min-w-0" aria-label="Прогресс разбора">
-    <div className="flex items-center gap-1.5">{steps.map((step, index) => <div key={step.label} className="flex min-w-0 flex-1 items-center gap-1.5">
-      <span title={step.label} className={`grid size-4 shrink-0 place-items-center rounded-full border ${step.state === "done" ? "border-[#7fa75f] bg-[#e9f5d6] text-[#36572d]" : step.state === "active" ? "border-[#d7aa4a] bg-[#fff5d6] text-[#7b5b17]" : "border-[#d7dce0] bg-white text-[#a5adb5]"}`}>{step.state === "done" ? <Check className="size-2.5" strokeWidth={2.5}/> : step.state === "active" ? <Clock3 className="size-2.5"/> : <Circle className="size-2"/>}</span>
-      <span className={`truncate text-[10px] ${step.state === "waiting" ? "text-muted-foreground" : "text-foreground"}`}>{step.label}</span>{index < steps.length - 1 && <span className="h-px min-w-2 flex-1 bg-border"/>}
-    </div>)}</div>
-    {outcome && <div className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${progress.outcome === "candidate" ? "bg-[#e9f5d6] text-[#36572d]" : progress.outcome === "deferred" ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700"}`}>{outcome}</div>}
-  </div>;
-}
-
-function ScreenerStatusControl({ value, disabled, onChange }: { value: ScreenerStatus; disabled: boolean; onChange: (status: ScreenerStatus) => void }) {
-  return <Select value={value} disabled={disabled} onValueChange={value => onChange(value as ScreenerStatus)}>
-    <SelectTrigger className={`query-decision-trigger query-status ${value} query-decision-inline`} aria-label="Статус первичного отбора"><SelectValue /></SelectTrigger>
-    <SelectContent>{Object.entries(screenerStatusLabels).map(([key,label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
-  </Select>;
-}
-
 export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error, periods, state, onChange, launchPeriod, onChanged, subjects, onSubjectsChanged, list, onListChange, canDecide, onSaved }: {
   canDecide: boolean; onSaved: (candidate: Candidate) => void;
   list: QueryList; onListChange: (list: QueryList) => void;
@@ -89,25 +65,16 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
   const [statusSaving,setStatusSaving]=useState<string|null>(null),[statusError,setStatusError]=useState("");
   const [bulkSaving,setBulkSaving]=useState(false);
   const busy=screening.busy||statusSaving!==null||bulkSaving;
-  const statusFilters=state.queryStatusFilters?.[list]??[];
-  const filterScope=JSON.stringify([state.search,state.filters,statusFilters,state.minScore]);
+  const filterScope=JSON.stringify([state.search,state.filters,state.minScore]);
   useEffect(()=>setSelected(new Set()),[filterScope,list]);
-  const rowStatus=(row:SummaryRow)=>screenerStatus(screening.marks[queryKey(row.query)]);
-  const filtered=selection.rows.filter(row=>(list==="all"||screening.marks[queryKey(row.query)]===list)&&(!statusFilters.length||statusFilters.includes(rowStatus(row))));
-  if(state.sortByStatus)filtered.sort((a,b)=>(state.direction==="asc"?1:-1)*screenerStatusLabels[rowStatus(a)].localeCompare(screenerStatusLabels[rowStatus(b)],"ru"));
-  const counts={all:selection.rows.length,shortlisted:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="shortlisted").length,excluded:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="excluded").length};
+  const filtered=selection.rows.filter(row=>list==="all" || (list==="unreviewed" ? !screening.marks[queryKey(row.query)] : screening.marks[queryKey(row.query)]===list));
+  const counts={all:selection.rows.length,unreviewed:selection.rows.filter(r=>!screening.marks[queryKey(r.query)]).length,shortlisted:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="shortlisted").length,excluded:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="excluded").length};
   const selectedRows=[...new Map(selection.rows.filter(r=>selected.has(queryKey(r.query))).map(r=>[queryKey(r.query),r])).values()];
   async function mark(status:ScreeningMark|"unmarked"){
     const count=selectedRows.length;
     if(await screening.save(selectedRows,status)){
       setSelected(new Set());onChanged();
       toast.success(status==="shortlisted"?`В чистовике: ${count}`:status==="excluded"?`Исключено: ${count}`:`Не разобрано: ${count}`);
-    }
-  }
-  async function markOne(row:SummaryRow,status:ScreenerStatus){
-    if(await screening.save([row],status==="unreviewed"?"unmarked":status)){
-      onChanged();
-      toast.success(screenerStatusLabels[status]);
     }
   }
   async function changeStatus(subject:string,query:string,action:CandidateAction,reason:string,quiet=false){
@@ -142,8 +109,6 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
       status: "all",
       minScore: null,
       sortByScore: false,
-      sortByStatus: false,
-      queryStatusFilters: {},
       sort: "frequency",
       direction: "desc",
     });
@@ -153,18 +118,19 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
     <div className="screener-heading">
       <div><h1 className="screener-title">Поиск ниш</h1><p className="screener-subtitle">WB · {prettyMonth(periods.period)} к {prettyMonth(periods.comparisonPeriod)} · свод запросов</p></div>
       <div className="screener-heading-actions">
-        <Button type="button" className="screener-control screener-primary screener-action-button shadow-none" onClick={() => patch({ filters: defaultFilters(), status: "active", minScore: null, sortByScore: false, sortByStatus: false, queryStatusFilters: {}, sort: "frequency", direction: "desc" })}>Стандартный фильтр</Button>
+        <Button type="button" className="screener-control screener-primary screener-action-button shadow-none" onClick={() => patch({ filters: defaultFilters(), status: "active", minScore: null, sortByScore: false, sort: "frequency", direction: "desc" })}>Стандартный фильтр</Button>
         <Button type="button" variant="outline" className="screener-control screener-action-button" onClick={resetFilters} disabled={loading || busy}><RotateCcw className="size-3.5" />Сбросить фильтры</Button>
       </div>
     </div>
     <div className="screener-panel">
       <div className="screener-toolbar">
         <div className="screener-search"><Search className="pointer-events-none absolute left-0 top-1/2 size-[1.125rem] -translate-y-1/2 text-muted-foreground" /><Input aria-label="Поиск в скринере" placeholder="Запрос или предмет…" value={state.search} onChange={(event) => patch({ search: event.target.value })} className="screener-control" />{state.search && <button type="button" className="absolute right-0 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground hover:bg-muted" onClick={() => patch({ search: "" })} aria-label="Очистить поиск"><X className="size-4" /></button>}</div>
-        <Button type="button" variant="outline" className="screener-control screener-subject-button shrink-0" disabled={loading||busy} onClick={()=>setSubjectDialog({})}>Предметы <span className="text-muted-foreground">{subjects.filter(s=>s.excluded).length} исключено</span></Button>
+        <Button type="button" variant="outline" className="screener-control screener-subject-button shrink-0" disabled={loading||busy} onClick={()=>setSubjectDialog({})}>Предметы <span className="text-muted-foreground">{subjects.filter(s=>s.excluded).length} скрыто</span></Button>
       </div>
     </div>
     <div className="screening-list-bar"><ToggleGroup type="single" value={list} onValueChange={v=>{if(v){onListChange(v as QueryList);patch({page:0,...(v!=="all"?{filters:clearNumericFilters(state.filters),minScore:null}:{})});}}} disabled={busy} className="screening-tabs" aria-label="Списки первичного отбора">
       <ToggleGroupItem value="all" data-list="all">Все <span>{fmt(counts.all)}</span></ToggleGroupItem>
+      <ToggleGroupItem value="unreviewed" data-list="unreviewed">Не разобрано <span>{fmt(counts.unreviewed)}</span></ToggleGroupItem>
       <ToggleGroupItem value="shortlisted" data-list="shortlisted">Чистовик <span>{fmt(counts.shortlisted)}</span></ToggleGroupItem>
       <ToggleGroupItem value="excluded" data-list="excluded">Исключённые <span>{fmt(counts.excluded)}</span></ToggleGroupItem>
     </ToggleGroup><span className="text-xs text-muted-foreground">В выбранном месяце · с текущими фильтрами</span></div>
@@ -172,7 +138,7 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
       <div className="flex flex-wrap items-center gap-2">
         {list!=="shortlisted"&&<Button size="sm" className="screening-shortlist-button" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("shortlisted")}>{list==="excluded"?"В чистовик":"В чистовик"}</Button>}
         {list==="shortlisted"&&<><QueryDecision actionTrigger={{value:"candidate",label:"Кандидат в закуп"}} status="shortlisted" query={`Выбрано запросов: ${selectedRows.length}`} canDecide={canDecide} saving={bulkSaving} disabled={!selectedRows.length||busy||!canDecide||screening.loading||!!screening.error} blockers={bulkBlockers} error={statusError} onClearError={()=>setStatusError("")} onApply={applyBulk}/><QueryDecision actionTrigger={{value:"deferred",label:"Отложить"}} status="shortlisted" query={`Выбрано запросов: ${selectedRows.length}`} canDecide={canDecide} saving={bulkSaving} disabled={!selectedRows.length||busy||screening.loading||!!screening.error} blockers={[]} error={statusError} onClearError={()=>setStatusError("")} onApply={applyBulk}/></>}
-        <Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("unmarked")}>Не разобрано</Button>
+        <Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("unmarked")}>Вернуть в неразобранные</Button>
         {list!=="excluded"&&<Button size="sm" variant="outline" className="screening-exclude-button" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("excluded")}>Исключить запрос</Button>}
         {list!=="shortlisted"&&<Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>setSubjectDialog({exclude:[...new Set(selectedRows.map(r=>r.subject))]})}>Скрыть предмет</Button>}
       </div>
@@ -180,22 +146,15 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
     {screening.error&&<div role="alert" className="screening-error">{screening.error}<Button size="sm" variant="outline" onClick={screening.retry} disabled={screening.busy}>Повторить загрузку</Button></div>}
     {error ? <EmptyBlock title="Свод недоступен" copy={error}><Button onClick={onRetry}>Повторить загрузку</Button></EmptyBlock> : loading || screening.loading ? <div role="status" className="rounded-2xl border bg-white p-12 text-center text-muted-foreground">Загружаем свод и сохранённые разборы…</div> : <>
       <QueryTable selection={{selected,scopeRows:filtered,disabled:busy||screening.loading||!!screening.error,onToggle:(row,checked)=>setSelected(old=>{const next=new Set(old);if(checked)next.add(queryKey(row.query));else next.delete(queryKey(row.query));return next;}),onPage:checked=>setSelected(old=>{const next=new Set(old);for(const row of filtered){if(checked)next.add(queryKey(row.query));else next.delete(queryKey(row.query));}return next;})}} rowMark={row=>screening.marks[queryKey(row.query)]} renderFilter={renderFilter} rows={filtered.slice(page * pageSize, (page + 1) * pageSize)} periods={periods} onOpen={(subject,query)=>onOpen(subject,query,screening.marks[queryKey(query)]==="excluded",screening.marks[queryKey(query)]==="shortlisted")}
-        sort={state.sortByScore || state.sortByStatus ? undefined : { key: state.sort, direction: state.direction }} onSort={(key) => patch({ sort: key, sortByScore: false, sortByStatus: false, direction: state.sort === key && state.direction === "desc" ? "asc" : "desc" })}
-        scoreSort={state.sortByScore ? state.direction : undefined} onScoreSort={() => patch({sortByScore:true, sortByStatus:false, direction: state.sortByScore && state.direction === "desc" ? "asc" : "desc"})}
+        sort={state.sortByScore ? undefined : { key: state.sort, direction: state.direction }} onSort={(key) => patch({ sort: key, sortByScore: false, direction: state.sort === key && state.direction === "desc" ? "asc" : "desc" })}
+        scoreSort={state.sortByScore ? state.direction : undefined} onScoreSort={() => patch({sortByScore:true, direction: state.sortByScore && state.direction === "desc" ? "asc" : "desc"})}
         renderScore={(subject, query) => { const score = selection.scores.get(analysisKey(subject, query)); return score ? <span className={"research-score " + score.tone} title={score.complete ? "Оценка разбора; подробности внутри" : "Предварительно: анализ не завершён"}>{score.total}{!score.complete && <small>*</small>}</span> : <span className="research-score neutral" title="Запрос ещё не разобран">—</span>; }}
         scoreFilter={<Select value={state.minScore == null ? "off" : String(state.minScore)} onValueChange={value => patch({minScore:value === "off" ? null : Number(value)})}><SelectTrigger className="column-filter-control" data-filter-enabled={state.minScore != null} aria-label="Минимальный общий балл"><SelectValue /></SelectTrigger><SelectContent className="screener-select-menu" position="popper" align="start"><SelectItem value="off">Все баллы</SelectItem><SelectItem value="0">Завершённые</SelectItem><SelectItem value="40">От 40</SelectItem><SelectItem value="70">От 70</SelectItem><SelectItem value="80">От 80</SelectItem></SelectContent></Select>}
-        statusSort={state.sortByStatus?state.direction:undefined} onStatusSort={()=>patch({sortByStatus:true,sortByScore:false,direction:state.sortByStatus&&state.direction==="asc"?"desc":"asc"})}
-        statusFilter={<Popover><PopoverTrigger asChild><Button variant="outline" className="column-filter-control" data-filter-enabled={!!statusFilters.length} aria-label="Фильтр статусов">{!statusFilters.length?"Все":statusFilters.length===1?screenerStatusLabels[statusFilters[0]]:`Статусы · ${statusFilters.length}`}<ChevronDown className="size-3.5"/></Button></PopoverTrigger><PopoverContent align="end" className="w-60 space-y-3 bg-white"><p className="text-sm font-medium">Статус первичного отбора</p>{Object.entries(screenerStatusLabels).map(([key,label])=><label key={key} className="flex items-center gap-2 text-sm"><Checkbox checked={statusFilters.includes(key as ScreenerStatus)} onCheckedChange={checked=>patch({queryStatusFilters:{...state.queryStatusFilters,[list]:checked?[...statusFilters,key as ScreenerStatus]:statusFilters.filter(s=>s!==key)}})}/>{label}</label>)}<Button size="sm" variant="ghost" onClick={()=>patch({queryStatusFilters:{...state.queryStatusFilters,[list]:[]}})}>Все статусы</Button></PopoverContent></Popover>}
-        renderWork={(subject, query) => {
-          const row=selection.rows.find(item=>item.subject===subject&&item.query===query);
-          const record=selection.records.get(analysisKey(subject,query)),mark=screening.marks[queryKey(query)];
-          if(!row)return null;
-          return <div className="query-status-cell"><ScreenerStatusControl value={screenerStatus(mark)} disabled={busy||screening.loading||!!screening.error} onChange={status=>void markOne(row,status)}/>{mark==="shortlisted"&&<ReviewPipeline candidate={record}/>}</div>;
-        }} />
-      {!filtered.length && <div className="rounded-b-2xl border border-t-0 bg-white p-8 text-center"><p className="text-sm text-muted-foreground">Нет запросов с такими условиями.</p><Button variant="ghost" className="mt-2" onClick={() => patch({filters:clearNumericFilters(state.filters), minScore:null, status:"all", queryStatusFilters:{...state.queryStatusFilters,[list]:[]}, search:""})}>Сбросить все фильтры</Button></div>}
+      />
+      {!filtered.length && <div className="rounded-b-2xl border border-t-0 bg-white p-8 text-center"><p className="text-sm text-muted-foreground">Нет запросов с такими условиями.</p><Button variant="ghost" className="mt-2" onClick={() => patch({filters:clearNumericFilters(state.filters), minScore:null, status:"all", search:""})}>Сбросить все фильтры</Button></div>}
       <div className="screener-footer flex flex-wrap items-center justify-between gap-4 text-[#7a838d]"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><span aria-live="polite">{filtered.length ? `Показано ${fmt(page * pageSize + 1)}–${fmt(Math.min((page + 1) * pageSize, filtered.length))} из ${fmt(filtered.length)} запросов` : "0 запросов"}</span><Button type="button" variant="ghost" size="sm" className="h-[1.875rem] text-xs" onClick={() => patch({ filters: clearNumericFilters(state.filters), minScore: null })} disabled={!activeCount && state.minScore == null}>Показать всё</Button></div><QueryPagination page={page} total={filtered.length} pageSize={pageSize} onChange={(next) => patch({ page: next })} /></div>
     </>}
-    <p className="screener-note">В скринере только три статуса: «Не разобрано», «Чистовик» и «Исключено». Они меняются сразу, без подтверждающих окон. В чистовике прогресс анализа показывается отдельно и не создаёт дополнительных ручных статусов.</p>
+    <p className="screener-note">Запросы имеют три состояния: «Не разобрано», «Чистовик» и «Исключено». Скрытие предмета — отдельная настройка и не меняет состояние запроса. Внутренние решения по анализу принимаются в карточке запроса.</p>
     {subjectDialog&&<SubjectSettings subjects={subjects} exclude={subjectDialog.exclude} onClose={()=>setSubjectDialog(null)} onApplied={changes=>{onSubjectsChanged(changes);setSelected(new Set());}}/>}
   </main>;
 }

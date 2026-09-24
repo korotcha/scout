@@ -53,15 +53,15 @@ export function SubjectSettings({ subjects, exclude, onClose, onApplied }: {
     finally { setBusy(false); }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="subject-settings-dialog sm:max-w-2xl" showCloseButton={!busy}>
-    <DialogHeader><DialogTitle>{exclude ? "Исключить предметы целиком" : "Настройка предметов"}</DialogTitle><DialogDescription>Исключённые предметы скрываются во всех месяцах. Данные и разборы сохраняются; предмет можно вернуть здесь или в «Исключениях».</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>{exclude ? "Скрыть предметы целиком" : "Настройка предметов"}</DialogTitle><DialogDescription>Скрытые предметы не участвуют в скринере во всех месяцах. Данные и разборы сохраняются; предмет можно вернуть здесь.</DialogDescription></DialogHeader>
     <Input aria-label="Поиск предмета" placeholder="Найти предмет…" value={search} onChange={e => setSearch(e.target.value)} disabled={loading || busy} />
-    {!exclude && <ToggleGroup type="single" value={tab} onValueChange={v => { if (v) setTab(v); }} className="justify-start" aria-label="Показать предметы"><ToggleGroupItem value="all">Все · {catalog.length}</ToggleGroupItem><ToggleGroupItem value="excluded">Исключённые · {catalog.filter(s => draft[s.subject]).length}</ToggleGroupItem></ToggleGroup>}
+    {!exclude && <ToggleGroup type="single" value={tab} onValueChange={v => { if (v) setTab(v); }} className="justify-start" aria-label="Показать предметы"><ToggleGroupItem value="all">Все · {catalog.length}</ToggleGroupItem><ToggleGroupItem value="excluded">Скрытые · {catalog.filter(s => draft[s.subject]).length}</ToggleGroupItem></ToggleGroup>}
     <div className="subject-settings-list" aria-busy={loading || busy}>{loading ? <p role="status">Загружаем предметы…</p> : !Object.keys(base).length && error ? <Button variant="outline" onClick={() => setReload(x => x + 1)}>Повторить загрузку</Button> : shown.length ? shown.map(s => <div className="subject-settings-row" data-excluded={!!draft[s.subject]} key={s.subject}>
-      <div className="subject-settings-name"><span>{s.subject}</span><Button size="sm" variant="outline" disabled={busy} aria-label={`${draft[s.subject] ? "Вернуть" : "Исключить"} предмет ${s.subject}`} onClick={() => setDraft(old => ({ ...old, [s.subject]: !old[s.subject] }))}>{draft[s.subject] ? "Вернуть" : "Исключить"}</Button></div>
+      <div className="subject-settings-name"><span>{s.subject}</span><Button size="sm" variant="outline" disabled={busy} aria-label={`${draft[s.subject] ? "Вернуть" : "Скрыть"} предмет ${s.subject}`} onClick={() => setDraft(old => ({ ...old, [s.subject]: !old[s.subject] }))}>{draft[s.subject] ? "Вернуть" : "Скрыть"}</Button></div>
       <span className="subject-settings-count" title="Запросов в загруженном своде выбранного месяца">{s.count} запр.</span>
     </div>) : <p className="text-muted-foreground">Предметы не найдены.</p>}</div>
     <Input aria-label="Причина изменения предметов" placeholder="Причина — необязательно" value={reason} onChange={e => setReason(e.target.value)} maxLength={2000} disabled={loading || busy} />
-    <div className="min-h-5 text-sm" role="status">{error ? <span className="text-red-700">{error}</span> : changes.length ? `Исключить: ${changes.filter(s => s.active).length} · Вернуть: ${changes.filter(s => !s.active).length}` : "Нет изменений"}</div>
+    <div className="min-h-5 text-sm" role="status">{error ? <span className="text-red-700">{error}</span> : changes.length ? `Скрыть: ${changes.filter(s => s.active).length} · Вернуть: ${changes.filter(s => !s.active).length}` : "Нет изменений"}</div>
     <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>Отмена</Button><Button disabled={busy || loading || !changes.length} onClick={() => void save()}>{busy ? "Сохраняем…" : "Применить"}</Button></DialogFooter>
   </DialogContent></Dialog>;
 }

@@ -1,4 +1,3 @@
-import type { QueryList, ScreenerStatus } from "./query-status";
 import type { SummaryRow } from "./market-types";
 
 export const filterDefinitions = [
@@ -14,7 +13,7 @@ export type FilterOperator = "gt" | "gte" | "lt" | "lte";
 export type NumericFilter = { enabled: boolean; threshold: number; operator: FilterOperator };
 export type ScreenerFilters = Record<NumericKey, NumericFilter>;
 export type SourcePeriods = { period: string; comparisonPeriod: string };
-export type ScreenerState = { search: string; filters: ScreenerFilters; sort: NumericKey; direction: "desc" | "asc"; page: number; status?: string; minScore?: number | null; sortByScore?: boolean; sortByStatus?: boolean; queryStatusFilters?: Partial<Record<QueryList, ScreenerStatus[]>> };
+export type ScreenerState = { search: string; filters: ScreenerFilters; sort: NumericKey; direction: "desc" | "asc"; page: number; status?: string; minScore?: number | null; sortByScore?: boolean };
 
 export const operators: Record<FilterOperator, string> = { gt: ">", gte: "≥", lt: "<", lte: "≤" };
 export function defaultFilters(): ScreenerFilters {

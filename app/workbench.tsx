@@ -117,7 +117,7 @@ const nav: Array<{ id: View; label: string; icon: typeof Database }> = [
   { id: "screener", label: "Скринер", icon: LayoutList },
   { id: "candidates", label: "Кандидаты + юнит", icon: FolderOpen },
   { id: "uploads", label: "Базы данных", icon: Database },
-  { id: "exclusions", label: "Исключения", icon: Ban },
+  { id: "exclusions", label: "Скрытые предметы", icon: Ban },
 ];
 
 const bubbleColors = ["#c9f27b", "#ffd4c2", "#bbd7ff", "#e4d7ff", "#d8e3d5", "#ffe48c"];
@@ -1816,7 +1816,7 @@ function ExclusionsView({
         body: JSON.stringify({ subject, active }),
       });
       if (!response.ok) throw new Error();
-      toast.success(active ? "Предмет исключён" : "Предмет возвращён в скрининг");
+      toast.success(active ? "Предмет скрыт" : "Предмет возвращён в скрининг");
     } catch {
       onChange(subject, !active);
       toast.error("Не удалось сохранить изменение");
@@ -1829,14 +1829,14 @@ function ExclusionsView({
     <main className="workspace-page exclusions-page">
       <PageIntro
         eyebrow="Управляемый список"
-        title="Исключения"
-        copy="Исключённые предметы не участвуют в скрининге. Решение можно пересмотреть в любой момент — данные при этом не удаляются."
+        title="Скрытые предметы"
+        copy="Скрытые предметы не участвуют в скринере. Решение можно пересмотреть в любой момент — данные при этом не удаляются."
       />
       <section className="overflow-hidden rounded-[1.25rem] border border-[#dfe5df] bg-white">
         <div className="flex flex-col gap-4 border-b border-[#e5e9e4] p-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="font-semibold">Предметы</h2>
-            <p className="mt-1 text-sm text-[#707b73]">{formatInteger(count)} исключено из автоматического скрининга</p>
+            <p className="mt-1 text-sm text-[#707b73]">{formatInteger(count)} скрыто из автоматического скринера</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative sm:w-72">
@@ -1849,7 +1849,7 @@ function ExclusionsView({
               />
             </div>
             <Button variant="outline" className="h-10 border-[#dce2dc]" onClick={() => setOnlyExcluded((value) => !value)}>
-              {onlyExcluded ? "Показать все" : "Только исключённые"}
+              {onlyExcluded ? "Показать все" : "Только скрытые"}
             </Button>
           </div>
         </div>
