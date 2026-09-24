@@ -3,7 +3,7 @@ import type { SummaryRow } from "./market-types";
 
 export const filterDefinitions = [
   { key: "yoyDemand", label: "Рост г/г", percent: true, threshold: 0, standard: true },
-  { key: "perArticle", label: "На товар", percent: false, threshold: 5, standard: true },
+  { key: "perArticle", label: "На товар", percent: false, threshold: 0, standard: true },
   { key: "yoyPressure", label: "Рост/товар", percent: true, threshold: 0, standard: true },
   { key: "frequency", label: "Спрос", percent: false, threshold: 1000, standard: false },
   { key: "articles", label: "Артикулов", percent: false, threshold: 0, standard: false },

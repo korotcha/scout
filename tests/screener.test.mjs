@@ -5,19 +5,19 @@ import { clearNumericFilters, initialScreenerState, selectScreenerRows, sourceNu
 
 const makeRow = (overrides = {}) => ({ subject: "Предмет", query: "Запрос", frequency: 1000, yoyDemand: 0.1, perArticle: 6, yoyPressure: 0.1, articles: 20, mom: 0.1, ...overrides });
 
-test("standard filter reproduces all 1197 visible rows of the source workbook", async () => {
+test("standard filter keeps the source rows with positive growth and per-product metrics", async () => {
   const { rows } = JSON.parse(await readFile(new URL("../public/source-summary.json", import.meta.url), "utf8"));
   const before = JSON.stringify(rows);
   assert.equal(rows.length, 33611);
   const state = initialScreenerState();
-  assert.equal(selectScreenerRows(rows, state).length, 1197);
+  assert.equal(selectScreenerRows(rows, state).length, 4736);
   assert.equal(selectScreenerRows(rows, { ...state, filters: clearNumericFilters(state.filters) }).length, 33611);
   assert.equal(JSON.stringify(rows), before, "filtering and sorting must not mutate source values or order");
 });
 
 test("strict boundaries use unrounded values; zero growth and missing comparisons do not pass", () => {
-  const good = makeRow({ query: "Чуть больше пяти", perArticle: 5.000000000000001, yoyDemand: 0.000000001 });
-  const rows = [makeRow({ perArticle: 5 }), makeRow({ yoyDemand: 0 }), makeRow({ yoyPressure: 0 }), makeRow({ yoyPressure: null }), makeRow({ yoyDemand: null }), good];
+  const good = makeRow({ query: "Чуть больше нуля", perArticle: 0.000000000000001, yoyDemand: 0.000000001 });
+  const rows = [makeRow({ perArticle: 0 }), makeRow({ yoyDemand: 0 }), makeRow({ yoyPressure: 0 }), makeRow({ yoyPressure: null }), makeRow({ yoyDemand: null }), good];
   assert.deepEqual(selectScreenerRows(rows, initialScreenerState()), [good]);
 });
 

@@ -193,6 +193,8 @@ body {
 .market-app.screener-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: #f6f8f7; }
 .screener-surface { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 20px; }
 .screener-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; flex-shrink: 0; }
+.screener-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.screener-action-button, .screener-subject-button { min-width: 158px; justify-content: center; gap: 7px; }
 .screener-panel { flex-shrink: 0; margin: 16px 0 12px; padding: 8px; border: 1px solid #e1e5e2; border-radius: 6px; background: #fff; }
 .screener-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .screener-control, .screener-popover [data-slot="select-trigger"][data-size] { height: 36px; min-height: 36px; border-radius: 6px; padding: 7px 10px; font-size: 13px; line-height: 20px; background: white; box-shadow: none; }
@@ -744,17 +746,20 @@ button:focus-visible:active { transform: none; }
 .factory-dialog .factory-price { width: 75px; }
 .factory-dialog tr[data-selected="true"] { background: #f0f6e9; }
 /* Screener filters follow the competitor table's field treatment. */
-.screener-surface .query-table-scored table { min-width: 1440px; }
-.screener-surface .query-table-scored .query-column-score { width: 148px; }
-.screener-surface .query-table-scored .query-column-name { width: auto; }
-.screener-surface .query-table-scored .query-column-subject { width: 168px; }
-.screener-surface .query-table-scored .query-column-work { width: 170px; }
+.screener-surface .query-table-scored table,
+.screener-surface .query-table-selectable table { min-width: 0; width: 100%; table-layout: fixed; }
+.screener-surface .query-table-scored .query-column-checkbox,
+.screener-surface .query-table-selectable .query-column-checkbox { width: 4%; }
+.screener-surface .query-table-scored .query-column-score { width: 7%; }
+.screener-surface .query-table-scored .query-column-name { width: 18%; }
+.screener-surface .query-table-scored .query-column-subject { width: 11%; }
+.screener-surface .query-table-scored .query-column-work { width: 12.5%; }
 .screener-surface .query-table-scored .query-column-frequency,
 .screener-surface .query-table-scored .query-column-yoyDemand,
 .screener-surface .query-table-scored .query-column-perArticle,
 .screener-surface .query-table-scored .query-column-yoyPressure,
 .screener-surface .query-table-scored .query-column-articles,
-.screener-surface .query-table-scored .query-column-mom { width: 116px; }
+.screener-surface .query-table-scored .query-column-mom { width: 7.5%; }
 .screener-surface .query-table-scored th { padding: 10px 8px; vertical-align: bottom; background: #f8faf6; }
 .screener-surface .query-table-scored .query-header-sortable,
 .screener-surface .query-table-scored th:first-child > div:first-child { min-height: 24px; }
@@ -794,9 +799,11 @@ button:focus-visible:active { transform: none; }
 .screening-exclude-button { background: #fff1ef; border-color: #edc5bf; color: #9f4035; }
 .screening-exclude-button:hover { background: #ffe5e0; }
 .screening-error { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px; margin-bottom: 10px; background: #fff1ef; color: #9f4035; font-size: 13px; }
-.screener-surface .query-table-selectable table { min-width: 1484px; }
-.screener-surface .query-column-checkbox { width: 44px; }
-.screener-surface .query-checkbox-cell { text-align: center; padding: 8px; }
+.screener-surface .query-checkbox-cell { text-align: center; padding: 8px 5px; }
+.screener-surface .query-table-scored th,
+.screener-surface .query-table-scored td { min-width: 0; overflow: hidden; }
+.screener-surface .query-table-scored .query-column-filter { min-width: 0; }
+.screener-surface .query-status-cell { min-width: 0; width: 100%; }
 .screener-surface .query-table-selectable th:nth-child(2) > div:first-child { position: relative; padding-right: 14px; min-height: 24px; }
 .query-table-selectable tr[data-screening-mark="shortlisted"] td { background: #eff8ec; }
 .query-table-selectable tr[data-screening-mark="excluded"] td { background: #fff1ef; }
@@ -823,7 +830,40 @@ button:focus-visible:active { transform: none; }
 .query-decision-trigger { width: 220px; height: 36px; box-shadow: none; }
 
 .query-status.shortlisted { color: #305e43; background: #edf6ee; border-color: #bdd6c0; }
-.query-decision-trigger.query-decision-inline { width: 100%; min-width: 0; max-width: 100%; height: 32px; padding: 4px 6px; gap: 4px; font-size: 13px; white-space: nowrap; }
+.query-decision-trigger.query-decision-inline { width: 100%; min-width: 0; max-width: 100%; min-height: 32px; height: auto; padding: 4px 6px; gap: 4px; font-size: 12px; line-height: 15px; white-space: normal; }
+.query-decision-trigger.query-decision-inline [data-slot="select-value"] { min-width: 0; overflow-wrap: anywhere; white-space: normal; text-align: left; }
+
+@media (max-width: 1023px) {
+  .screener-surface .query-column-articles,
+  .screener-surface .query-column-mom { display: none; }
+  .screener-surface .query-table-scored .query-column-score { width: 8%; }
+  .screener-surface .query-table-scored .query-column-name { width: 21%; }
+  .screener-surface .query-table-scored .query-column-subject { width: 12%; }
+  .screener-surface .query-table-scored .query-column-work { width: 14%; }
+  .screener-surface .query-table-scored .query-column-frequency,
+  .screener-surface .query-table-scored .query-column-yoyDemand,
+  .screener-surface .query-table-scored .query-column-perArticle,
+  .screener-surface .query-table-scored .query-column-yoyPressure { width: 10.25%; }
+}
+@media (max-width: 767px) {
+  .screener-heading-actions { width: 100%; justify-content: stretch; }
+  .screener-heading-actions .screener-action-button { flex: 1 1 0; min-width: 0; }
+  .screener-toolbar .screener-subject-button { min-width: 0; flex: 1; }
+  .screener-surface .query-column-score,
+  .screener-surface .query-column-subject,
+  .screener-surface .query-column-yoyPressure { display: none; }
+  .screener-surface .query-table-scored .query-column-checkbox { width: 8%; }
+  .screener-surface .query-table-scored .query-column-name { width: 35%; }
+  .screener-surface .query-table-scored .query-column-frequency,
+  .screener-surface .query-table-scored .query-column-yoyDemand,
+  .screener-surface .query-table-scored .query-column-perArticle { width: 14%; }
+  .screener-surface .query-table-scored .query-column-work { width: 15%; }
+  .screener-surface .query-table-scored th,
+  .screener-surface .query-table-scored td { padding-inline: 5px; }
+  .screener-surface .query-table-scored .query-name-cell { padding-left: 7px; }
+  .screener-surface .query-table-scored .query-name-button { gap: 4px; font-size: 12px; }
+  .screener-surface .query-table-scored .query-status-cell .query-decision-inline { font-size: 11px; padding-inline: 4px; }
+}
 
 /* Unit economics shares the screener's surfaces and alignment. Colours identify accounting groups. */
 .unit-economics-page { --primary: #19231c; --primary-foreground: #fff; --border: #dce3df; --ring: #69845d; }
