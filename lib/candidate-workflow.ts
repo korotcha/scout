@@ -129,7 +129,7 @@ export type Candidate = {
 };
 export const statusLabels: Record<CandidateStatus, string> = {
   unreviewed: "Не разобрано",
-  analysis: "В анализе", analysis_ready: "На решении", sourcing: "Кандидат в закуп", ready: "Юнитка на решении",
+  analysis: "В работе", analysis_ready: "На решении", sourcing: "Кандидат в закуп", ready: "Юнитка на решении",
   purchased: "К закупке", deferred: "Отложено", rejected: "Отклонено",
 };
 

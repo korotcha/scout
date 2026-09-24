@@ -67,8 +67,8 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
   const busy=screening.busy||statusSaving!==null||bulkSaving;
   const filterScope=JSON.stringify([state.search,state.filters,state.minScore]);
   useEffect(()=>setSelected(new Set()),[filterScope,list]);
-  const filtered=selection.rows.filter(row=>list==="all" || (list==="unreviewed" ? !screening.marks[queryKey(row.query)] : screening.marks[queryKey(row.query)]===list));
-  const counts={all:selection.rows.length,unreviewed:selection.rows.filter(r=>!screening.marks[queryKey(r.query)]).length,shortlisted:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="shortlisted").length,excluded:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="excluded").length};
+  const filtered=selection.rows.filter(row=>list==="all" || screening.marks[queryKey(row.query)]===list);
+  const counts={all:selection.rows.length,shortlisted:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="shortlisted").length,excluded:selection.rows.filter(r=>screening.marks[queryKey(r.query)]==="excluded").length};
   const selectedRows=[...new Map(selection.rows.filter(r=>selected.has(queryKey(r.query))).map(r=>[queryKey(r.query),r])).values()];
   async function mark(status:ScreeningMark|"unmarked"){
     const count=selectedRows.length;
@@ -135,7 +135,6 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
     </div>
     <div className="screening-list-bar"><ToggleGroup type="single" value={list} onValueChange={v=>{if(v){onListChange(v as QueryList);patch({page:0,...(v!=="all"?{filters:clearNumericFilters(state.filters),minScore:null}:{})});}}} disabled={busy} className="screening-tabs" aria-label="Списки первичного отбора">
       <ToggleGroupItem value="all" data-list="all">Все <span>{fmt(counts.all)}</span></ToggleGroupItem>
-      <ToggleGroupItem value="unreviewed" data-list="unreviewed">Не разобрано <span>{fmt(counts.unreviewed)}</span></ToggleGroupItem>
       <ToggleGroupItem value="shortlisted" data-list="shortlisted">Чистовик <span>{fmt(counts.shortlisted)}</span></ToggleGroupItem>
       <ToggleGroupItem value="excluded" data-list="excluded">Исключённые <span>{fmt(counts.excluded)}</span></ToggleGroupItem>
     </ToggleGroup><span className="text-xs text-muted-foreground">В выбранном месяце · с текущими фильтрами</span></div>
@@ -143,7 +142,7 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
       <div className="flex flex-wrap items-center gap-2">
         {list!=="shortlisted"&&<Button size="sm" className="screening-shortlist-button" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("shortlisted")}>{list==="excluded"?"В чистовик":"В чистовик"}</Button>}
         {list==="shortlisted"&&<><QueryDecision actionTrigger={{value:"candidate",label:"Кандидат в закуп"}} status="shortlisted" query={`Выбрано запросов: ${selectedRows.length}`} canDecide={canDecide} saving={bulkSaving} disabled={!selectedRows.length||busy||!canDecide||screening.loading||!!screening.error} blockers={bulkBlockers} error={statusError} onClearError={()=>setStatusError("")} onApply={applyBulk}/><QueryDecision actionTrigger={{value:"deferred",label:"Отложить"}} status="shortlisted" query={`Выбрано запросов: ${selectedRows.length}`} canDecide={canDecide} saving={bulkSaving} disabled={!selectedRows.length||busy||screening.loading||!!screening.error} blockers={[]} error={statusError} onClearError={()=>setStatusError("")} onApply={applyBulk}/></>}
-        <Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("unmarked")}>Вернуть в неразобранные</Button>
+        <Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("unmarked")}>Не разобрано</Button>
         {list!=="excluded"&&<Button size="sm" variant="outline" className="screening-exclude-button" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>void mark("excluded")}>Исключить запрос</Button>}
         {list!=="shortlisted"&&<Button size="sm" variant="outline" disabled={!selectedRows.length||busy||screening.loading||!!screening.error} onClick={()=>setSubjectDialog({exclude:[...new Set(selectedRows.map(r=>r.subject))]})}>Скрыть предмет</Button>}
       </div>
@@ -155,11 +154,11 @@ export function ScreenerView({ rows, loading, candidates, onOpen, onRetry, error
         scoreSort={state.sortByScore ? state.direction : undefined} onScoreSort={() => patch({sortByScore:true, direction: state.sortByScore && state.direction === "desc" ? "asc" : "desc"})}
         renderScore={(subject, query) => { const score = selection.scores.get(analysisKey(subject, query)); return score ? <span className={"research-score " + score.tone} title={score.complete ? "Оценка разбора; подробности внутри" : "Предварительно: анализ не завершён"}>{score.total}{!score.complete && <small>*</small>}</span> : <span className="research-score neutral" title="Запрос ещё не разобран">—</span>; }}
         scoreFilter={<Select value={state.minScore == null ? "off" : String(state.minScore)} onValueChange={value => patch({minScore:value === "off" ? null : Number(value)})}><SelectTrigger className="column-filter-control" data-filter-enabled={state.minScore != null} aria-label="Минимальный общий балл"><SelectValue /></SelectTrigger><SelectContent className="screener-select-menu" position="popper" align="start"><SelectItem value="off">Все баллы</SelectItem><SelectItem value="0">Завершённые</SelectItem><SelectItem value="40">От 40</SelectItem><SelectItem value="70">От 70</SelectItem><SelectItem value="80">От 80</SelectItem></SelectContent></Select>}
-      />
+        />
       {!filtered.length && <div className="rounded-b-2xl border border-t-0 bg-white p-8 text-center"><p className="text-sm text-muted-foreground">Нет запросов с такими условиями.</p><Button variant="ghost" className="mt-2" onClick={() => patch({filters:clearNumericFilters(state.filters), minScore:null, status:"all", search:""})}>Сбросить все фильтры</Button></div>}
       <div className="screener-footer flex flex-wrap items-center justify-between gap-4 text-[#7a838d]"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><span aria-live="polite">{filtered.length ? `Показано ${fmt(page * pageSize + 1)}–${fmt(Math.min((page + 1) * pageSize, filtered.length))} из ${fmt(filtered.length)} запросов` : "0 запросов"}</span><Button type="button" variant="ghost" size="sm" className="h-[1.875rem] text-xs" onClick={() => patch({ filters: clearNumericFilters(state.filters), minScore: null })} disabled={!activeCount && state.minScore == null}>Показать всё</Button></div><QueryPagination page={page} total={filtered.length} pageSize={pageSize} onChange={(next) => patch({ page: next })} /></div>
     </>}
-    <p className="screener-note">Запросы имеют три состояния: «Не разобрано», «Чистовик» и «Исключено». Скрытие предмета — отдельная настройка и не меняет состояние запроса. Внутренние решения по анализу принимаются в карточке запроса.</p>
+    <p className="screener-note">Скринер только распределяет запросы по спискам: «Все», «Чистовик» и «Исключённые». Рабочий статус и ход анализа назначаются уже внутри карточки запроса в «Чистовике».</p>
     {subjectDialog&&<SubjectSettings subjects={subjects} exclude={subjectDialog.exclude} onClose={()=>setSubjectDialog(null)} onApplied={changes=>{onSubjectsChanged(changes);setSelected(new Set());}}/>}
   </main>;
 }
