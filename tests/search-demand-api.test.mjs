@@ -20,12 +20,13 @@ globalThis.__demandEnv = { INTEGRATION_ENCRYPTION_KEY: secret, BUCKET: {
     throw new Error('unexpected query');
   }, async run() { if (sql.includes("encrypted_key = ''")) connection.encrypted_key = ''; return {}; }
 }; } } };
-await build({entryPoints:[new URL('../app/api/search-demand/route.ts',import.meta.url).pathname],outfile:join(dir,'route.mjs'),bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'env',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'env',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const env=globalThis.__demandEnv;',loader:'js'}));}}]});
+await build({entryPoints:[new URL('../app/api/search-demand/route.ts',import.meta.url).pathname],outfile:join(dir,'route.mjs'),bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'env',setup(b){b.onResolve({filter:/^@\/(db|lib\/object-store)$/},args=>({path:args.path,namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},args=>({contents:args.path==='@/db'?'export const getRawDb=()=>globalThis.__demandEnv.DB':'export const getObjectStore=()=>globalThis.__demandEnv.BUCKET',loader:'js'}));}}]});
 const api = await import(pathToFileURL(join(dir,'route.mjs')).href);
 const token='not-a-real-token-1234567890';
 const req = (body, email='korotcha@yandex.ru', origin='https://app.test') => new Request('https://app.test/api/search-demand?query=кофемашина',{method:body?'POST':'GET',headers:{'oai-authenticated-user-email':email,origin,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
 test('query integration caches safely, reuses encrypted key, preserves history on failure and enforces access',async()=>{
-  const original=globalThis.fetch;
+  const original=globalThis.fetch, previousSecret=process.env.INTEGRATION_ENCRYPTION_KEY;
+  process.env.INTEGRATION_ENCRYPTION_KEY=secret;
   globalThis.fetch=async(url,opts)=>{ calls++; assert.equal(url.pathname,'/api/analytics/v1/wb/keywords/frequency');assert.equal(opts.headers['X-Mpstats-TOKEN'],token);return Response.json([{date:'2024-01-01',frequency:10},{date:'2025-01-01',frequency:20}]); };
   try {
     assert.equal((await api.POST(req({query:'кофемашина',action:'load',token},'other@test'))).status,403);
@@ -44,5 +45,16 @@ test('query integration caches safely, reuses encrypted key, preserves history o
     const failed=await (await api.POST(req({query:'кофемашина',action:'refresh'}))).json();assert.equal(failed.httpStatus,403);
     assert.equal(JSON.stringify(failed).includes(token),false);assert.equal(JSON.stringify([...objects.values()]),saved);
     await api.POST(req({query:'кофемашина',action:'disconnect'}));assert.equal(connection.encrypted_key,'');assert.equal(JSON.stringify([...objects.values()]),saved);
-  }finally{globalThis.fetch=original;}
+  }finally{globalThis.fetch=original;if(previousSecret===undefined)delete process.env.INTEGRATION_ENCRYPTION_KEY;else process.env.INTEGRATION_ENCRYPTION_KEY=previousSecret;}
+});
+test('server-managed MPStats key needs no repeated browser entry and is never returned',async()=>{
+ const original=globalThis.fetch, previous=process.env.MPSTATS_API_KEY;process.env.MPSTATS_API_KEY=token;
+ objects.clear();connection=null;leased=false;
+ globalThis.fetch=async(url,opts)=>{assert.equal(opts.headers['X-Mpstats-TOKEN'],token);return Response.json([{date:'2025-01-01',frequency:20}]);};
+ try{
+  const status=await (await api.GET(req())).json();assert.equal(status.connected,true);assert.equal(JSON.stringify(status).includes(token),false);
+  const loaded=await (await api.POST(req({query:'кофемашина',action:'load'}))).json();assert.equal(loaded.saved,true);assert.equal(loaded.connected,true);assert.equal(JSON.stringify(loaded).includes(token),false);
+  assert.equal(connection.encrypted_key,'');
+  assert.equal((await api.POST(req({query:'кофемашина',action:'disconnect'}))).status,409);
+ }finally{globalThis.fetch=original;if(previous===undefined)delete process.env.MPSTATS_API_KEY;else process.env.MPSTATS_API_KEY=previous;}
 });

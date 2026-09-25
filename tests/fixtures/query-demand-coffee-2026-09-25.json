@@ -1,0 +1,309 @@
+{
+  "description": "Independent snapshots: actual SCOUT direct-query API history captured 2026-09-25; competitor workbook imported read-only. Test data only, never application input.",
+  "reference": {
+    "file": "Анализ запроса · кофемашина — 24.09.2026.xlsx",
+    "sheet": "Частота",
+    "range": "A1:D19",
+    "rows": [
+      {
+        "month": "2025-03",
+        "frequency": 199005,
+        "items": 24863,
+        "perItem": 8.00406226119133
+      },
+      {
+        "month": "2025-04",
+        "frequency": 173605,
+        "items": 23887,
+        "perItem": 7.2677607066605265
+      },
+      {
+        "month": "2025-05",
+        "frequency": 145030,
+        "items": 27280,
+        "perItem": 5.316348973607038
+      },
+      {
+        "month": "2025-06",
+        "frequency": 167675,
+        "items": 16067,
+        "perItem": 10.435986805253004
+      },
+      {
+        "month": "2025-07",
+        "frequency": 159199,
+        "items": 16985,
+        "perItem": 9.3729172799529
+      },
+      {
+        "month": "2025-08",
+        "frequency": 195717,
+        "items": 18366,
+        "perItem": 10.656484808885985
+      },
+      {
+        "month": "2025-09",
+        "frequency": 235255,
+        "items": 19936,
+        "perItem": 11.800511637239165
+      },
+      {
+        "month": "2025-10",
+        "frequency": 287653,
+        "items": 21890,
+        "perItem": 13.140840566468707
+      },
+      {
+        "month": "2025-11",
+        "frequency": 408808,
+        "items": 31895,
+        "perItem": 12.81730678789779
+      },
+      {
+        "month": "2025-12",
+        "frequency": 429194,
+        "items": 23335,
+        "perItem": 18.39271480608528
+      },
+      {
+        "month": "2026-01",
+        "frequency": 318230,
+        "items": 27547,
+        "perItem": 11.552256144044724
+      },
+      {
+        "month": "2026-02",
+        "frequency": 292241,
+        "items": 23049,
+        "perItem": 12.679118399930582
+      },
+      {
+        "month": "2026-03",
+        "frequency": 277992,
+        "items": 25129,
+        "perItem": 11.06259699948267
+      },
+      {
+        "month": "2026-04",
+        "frequency": 218393,
+        "items": 41843,
+        "perItem": 5.21934373730373
+      },
+      {
+        "month": "2026-05",
+        "frequency": 211296,
+        "items": 39464,
+        "perItem": 5.3541455503750255
+      },
+      {
+        "month": "2026-06",
+        "frequency": 208556,
+        "items": 37103,
+        "perItem": 5.621000997223944
+      },
+      {
+        "month": "2026-07",
+        "frequency": 223513,
+        "items": 36479,
+        "perItem": 6.127169056169303
+      },
+      {
+        "month": "2026-08",
+        "frequency": 191898,
+        "items": 49090,
+        "perItem": 3.9091057241800775
+      }
+    ]
+  },
+  "history": {
+    "version": 2,
+    "source": "mpstats-seo-keywords-selection",
+    "query": "кофемашина",
+    "fetchedAt": "2026-09-25T08:34:25.134Z",
+    "requestedFrom": "2023-10-01",
+    "requestedTo": "2026-09-01",
+    "points": [
+      {
+        "date": "2023-10-01",
+        "frequency": 202505,
+        "items": 984
+      },
+      {
+        "date": "2023-11-01",
+        "frequency": 256635,
+        "items": 1089
+      },
+      {
+        "date": "2023-12-01",
+        "frequency": 323175,
+        "items": 1534
+      },
+      {
+        "date": "2024-01-01",
+        "frequency": 280765,
+        "items": 937
+      },
+      {
+        "date": "2024-02-01",
+        "frequency": 208380,
+        "items": 1634
+      },
+      {
+        "date": "2024-03-01",
+        "frequency": 226920,
+        "items": 1726
+      },
+      {
+        "date": "2024-04-01",
+        "frequency": 160865,
+        "items": 2115
+      },
+      {
+        "date": "2024-05-01",
+        "frequency": 129260,
+        "items": 2627
+      },
+      {
+        "date": "2024-06-01",
+        "frequency": 125945,
+        "items": 3077
+      },
+      {
+        "date": "2024-07-01",
+        "frequency": 122690,
+        "items": 3202
+      },
+      {
+        "date": "2024-08-01",
+        "frequency": 153500,
+        "items": 3352
+      },
+      {
+        "date": "2024-09-01",
+        "frequency": 180790,
+        "items": 3458
+      },
+      {
+        "date": "2024-10-01",
+        "frequency": 203375,
+        "items": 4003
+      },
+      {
+        "date": "2024-11-01",
+        "frequency": 249995,
+        "items": 16537
+      },
+      {
+        "date": "2024-12-01",
+        "frequency": 266540,
+        "items": 16972
+      },
+      {
+        "date": "2025-01-01",
+        "frequency": 376370,
+        "items": 12735
+      },
+      {
+        "date": "2025-02-01",
+        "frequency": 295480,
+        "items": 18058
+      },
+      {
+        "date": "2025-03-01",
+        "frequency": 263930,
+        "items": 19271
+      },
+      {
+        "date": "2025-04-01",
+        "frequency": 199005,
+        "items": 24863
+      },
+      {
+        "date": "2025-05-01",
+        "frequency": 173605,
+        "items": 23887
+      },
+      {
+        "date": "2025-06-01",
+        "frequency": 145030,
+        "items": 27280
+      },
+      {
+        "date": "2025-07-01",
+        "frequency": 167675,
+        "items": 16067
+      },
+      {
+        "date": "2025-08-01",
+        "frequency": 159199,
+        "items": 16985
+      },
+      {
+        "date": "2025-09-01",
+        "frequency": 195717,
+        "items": 18366
+      },
+      {
+        "date": "2025-10-01",
+        "frequency": 235255,
+        "items": 19936
+      },
+      {
+        "date": "2025-11-01",
+        "frequency": 287653,
+        "items": 21890
+      },
+      {
+        "date": "2025-12-01",
+        "frequency": 408808,
+        "items": 31895
+      },
+      {
+        "date": "2026-01-01",
+        "frequency": 429194,
+        "items": 23335
+      },
+      {
+        "date": "2026-02-01",
+        "frequency": 318230,
+        "items": 27547
+      },
+      {
+        "date": "2026-03-01",
+        "frequency": 292241,
+        "items": 23049
+      },
+      {
+        "date": "2026-04-01",
+        "frequency": 277992,
+        "items": 25129
+      },
+      {
+        "date": "2026-05-01",
+        "frequency": 218393,
+        "items": 41843
+      },
+      {
+        "date": "2026-06-01",
+        "frequency": 211296,
+        "items": 39464
+      },
+      {
+        "date": "2026-07-01",
+        "frequency": 208556,
+        "items": 37103
+      },
+      {
+        "date": "2026-08-01",
+        "frequency": 223513,
+        "items": 36479
+      },
+      {
+        "date": "2026-09-01",
+        "frequency": 191898,
+        "items": 49090
+      }
+    ],
+    "complete": true
+  }
+}

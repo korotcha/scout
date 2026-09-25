@@ -1,10 +1,28 @@
 import { readLimited } from './mpstats-check';
 
+// Verified against the live "Подбор запросов" report with an API token.
+export async function mpstatsSelectionRequest(token: string, query: string, date: string) {
+  const url = new URL('https://mpstats.io/api/seo/keywords/selection');
+  url.searchParams.set('date', date);
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'POST', headers: {
+      'X-Mpstats-TOKEN': token, Accept: 'application/json', 'Content-Type': 'application/json',
+    }, body: JSON.stringify({ startRow: 0, endRow: 2,
+      filterModel: { word: { filterType: 'text', type: 'equals', filter: query } }, sortModel: [] }),
+    redirect: 'manual', signal: AbortSignal.timeout(12000) });
+  } catch { throw Error('MPStats не ответил за отведённое время. Полученные месяцы сохранены.'); }
+  if (!response.ok) throw Error(response.status === 429 ? 'MPStats ограничил число запросов. Продолжите позже.' :
+    response.status === 401 || response.status === 403 ? 'MPStats не разрешил отчёт «Подбор запросов». Проверьте доступ на тарифе.' : `MPStats вернул HTTP ${response.status}.`);
+  try { return JSON.parse(await readLimited(response.body, 500_000)) as unknown; }
+  catch { throw Error('Не удалось прочитать отчёт MPStats. Полученные месяцы сохранены.'); }
+}
+
 export async function mpstatsRequest(token: string, path: string, params: Record<string, string>, method: 'GET' | 'POST' | 'PUT' = 'POST') {
   const url = new URL('https://mpstats.io/api/analytics/v1/wb' + path);
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
-    if (method === 'POST' && path === '/search/items' && ['startRow', 'endRow', 'filterModel', 'sortModel', 'fields'].includes(key)) body[key] = JSON.parse(value);
+    if (method === 'POST' && (path === '/search/items' || /^\/items\/\d+\/keywords$/.test(path)) && ['startRow', 'endRow', 'filterModel', 'sortModel', 'fields'].includes(key)) body[key] = JSON.parse(value);
     else url.searchParams.set(key, value);
   }
   let response: Response;

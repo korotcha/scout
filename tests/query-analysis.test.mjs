@@ -18,7 +18,7 @@ globalThis.__queryEnv = { INTEGRATION_ENCRYPTION_KEY: secret, BUCKET: {
   if (sql.startsWith('INSERT')) { if (leases.has(this.values[0])) return null; leases.add(this.values[0]); return { query_key: this.values[0] }; }
   throw Error('Unexpected SQL');
 }, async run() { leases.delete(this.values[0]); return {}; } }; } } };
-const plugins = [{ name: 'env', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'env', namespace: 'test' })); b.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const env=globalThis.__queryEnv;', loader: 'js' })); } }];
+const plugins = [{ name: 'env', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'env', namespace: 'test' })); b.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const env=globalThis.__queryEnv;', loader: 'js' })); b.onResolve({ filter: /^@\/lib\/object-store$/ }, args => args.importer.endsWith('/api/query-analysis/route.ts') ? { path: 'saved-analysis', namespace: 'saved-analysis' } : null); b.onLoad({ filter: /.*/, namespace: 'saved-analysis' }, () => ({ contents: 'export const getObjectStore=()=>globalThis.__queryEnv.BUCKET;', loader: 'js' })); } }];
 async function bundle(entry, file) { await build({ entryPoints: [new URL(entry, import.meta.url).pathname], outfile: join(dir, file), bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins }); return import(pathToFileURL(join(dir, file)).href); }
 const math = await bundle('../lib/query-analysis.ts', 'math.mjs');
 const analysis = await bundle('../app/api/query-analysis/route.ts', 'analysis.mjs');
@@ -53,28 +53,20 @@ test('seasonal peaks require a sustained wave and reject short local bumps', () 
   assert.equal(comparison.current.month, '2025-12');
   assert.ok(comparison.ratio > 1.11 && comparison.ratio < 1.12);
 });
-test('analysis resumes saved steps, stops safely on denied reports and never spends calls to read completed cache', async () => {
-  const original = globalThis.fetch; let calls = 0, denied = false;
+test('additional analysis is disabled, while saved reports remain readable without upstream calls', async () => {
+  const original = globalThis.fetch; let calls = 0;
   const query = 'кофемашина';
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(query))).toString('hex');
-  objects.set('search-demand/wb/'+hash+'.json', JSON.stringify({ query, points: [{ date: '2026-01-01', frequency: 100 }], fetchedAt: '2026-09-21' }));
-  globalThis.fetch = async (url, options) => {
-    calls++; assert.equal(options.headers['X-Mpstats-TOKEN'], token);
-    if (denied) return new Response('secret '+token, {status:403});
-    if (url.pathname.endsWith('/search/by_date')) return Response.json([{ period: url.searchParams.get('d1').slice(0,7), sales: 5, revenue: 10000, items: 3 }]);
-    if (url.pathname.endsWith('/search/items')) { const body = JSON.parse(options.body); assert.deepEqual(body.sortModel, [{colId:'revenue',sort:'desc'}]); assert.equal(body.endRow,10); return Response.json({total:2,data:[item(123456,1000),item(123457,500)]}); }
-    throw Error('Unexpected endpoint');
-  };
+  const key='query-analysis/wb/'+hash+'.json', saved={ query, requests:4, months:[], tasks:[] };
+  objects.set(key,JSON.stringify(saved));
+  globalThis.fetch = async () => { calls++; throw Error('No additional reports may be fetched'); };
   try {
     assert.equal((await analysis.POST(req({query,action:'step'},''))).status,401);
-    assert.equal((await analysis.POST(req({query,action:'step'},undefined,'https://evil.test'))).status,403);
-    let result = await (await analysis.POST(req({query,action:'step'}))).json(); assert.equal(result.report.requests,1);
-    result = await (await analysis.POST(req({query,action:'step'}))).json(); assert.equal(result.report.requests,2);
-    denied=true; result = await (await analysis.POST(req({query,action:'step'}))).json(); assert.equal(result.halt,true); assert.equal(result.report.tasks.filter(t=>t.state==='done').length,2);
-    assert.equal(JSON.stringify(result).includes(token),false);
-    denied=false; result = await (await analysis.POST(req({query,action:'step'}))).json(); assert.equal(result.report.requests,4); assert.equal(result.report.tasks.filter(t=>t.state==='error').length,1);
-    const key='query-analysis/wb/'+hash+'.json', saved=JSON.parse(objects.get(key)); saved.tasks.forEach(t=>t.state='done'); objects.set(key,JSON.stringify(saved));
-    result = await (await analysis.POST(req({query,action:'step'}))).json(); assert.equal(result.finished,true); assert.equal(calls,4); assert.equal(JSON.stringify([...objects.values()]).includes(token),false);
+    assert.equal((await analysis.POST(req({query,action:'step'}))).status,409);
+    assert.equal((await analysis.POST(req({query,action:'retry'}))).status,409);
+    const read=new Request('https://app.test/api/query-analysis?query='+encodeURIComponent(query),{headers:{'oai-authenticated-user-email':'manager@test'}});
+    assert.deepEqual((await (await analysis.GET(read)).json()).report,saved);
+    assert.equal(objects.get(key),JSON.stringify(saved));assert.equal(calls,0);
   } finally { globalThis.fetch=original; }
 });
 test('competitors enforce 3M threshold, reuse selection cache, and retry group population without a duplicate group', async () => {

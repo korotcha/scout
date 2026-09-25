@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   if (!parsed.success) return json({ error: "Укажите поисковый запрос." }, 400);
   try {
     const [row, snapshot] = await Promise.all([readConnection(), readSnapshot(parsed.data)]);
-    return json({ snapshot, connected: !!row?.encrypted_key, canUpdate: signedIn(request), canConnect: owner(request), storageReady: !!secret() });
+    return json({ snapshot, connected: !!process.env.MPSTATS_API_KEY || !!row?.encrypted_key, canUpdate: signedIn(request), canConnect: owner(request), storageReady: !!secret() });
   } catch { return json({ error: "Не удалось открыть сохранённую историю. Повторите загрузку." }, 503); }
 }
 export async function POST(request: Request) {
@@ -58,16 +58,17 @@ export async function POST(request: Request) {
   try {
     const db = getRawDb();
     if (action === "disconnect") {
+      if (process.env.MPSTATS_API_KEY) return json({ error: 'Ключ настроен в окружении сервера. Для отключения удалите MPSTATS_API_KEY из настроек окружения.' }, 409);
       await db.prepare("UPDATE api_connections SET encrypted_key = '', revision = revision + 1, updated_at = ? WHERE provider = 'mpstats'").bind(new Date().toISOString()).run();
       return json({ disconnected: true, message: "MPStats отключён. Загруженные графики сохранены." });
     }
     const row = await readConnection();
     if (action === "load" && !input.data.token) {
       const snapshot = await readSnapshot(query);
-      if (snapshot) return json({ snapshot, connected: !!row?.encrypted_key, cached: true });
+      if (snapshot) return json({ snapshot, connected: !!process.env.MPSTATS_API_KEY || !!row?.encrypted_key, cached: true });
     }
     if (remember && !secret()) return json({ error: "Сохранение подключения пока недоступно. Снимите галочку сохранения ключа, чтобы выполнить разовую загрузку." }, 503);
-    let token = input.data.token ?? (row?.encrypted_key ? await decryptKey(row.encrypted_key, secret(), context) : "");
+    let token = input.data.token ?? (process.env.MPSTATS_API_KEY || (row?.encrypted_key ? await decryptKey(row.encrypted_key, secret(), context) : ""));
     if (!token) return json({ error: "Подключите MPStats: введите API-токен." }, 400);
     if (query.includes(token.toLowerCase())) return json({ error: "В поле запроса нужен поисковый запрос, а не токен." }, 400);
     // Atomic one-minute lease prevents double clicks and concurrent tabs spending extra calls.
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
       token = ""; input.data.token = undefined;
       return json({ error: report.message, httpStatus: report.httpStatus, code: report.errorCode, empty: report.status === "empty" }, 502);
     }
-    let connected = !!row?.encrypted_key, warning = "";
+    let connected = !!process.env.MPSTATS_API_KEY || !!row?.encrypted_key, warning = "";
     if (input.data.token && remember) {
       const encrypted = await encryptKey(token, secret(), context);
       const saved = await db.prepare("UPDATE api_connections SET encrypted_key = ?, revision = revision + 1, updated_at = ?, last_error = NULL WHERE provider = 'mpstats' AND revision = ? RETURNING revision")

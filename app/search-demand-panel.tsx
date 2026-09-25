@@ -7,12 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { demandMonthSnapshots, normalizeDemandQuery, shiftMonth, type DemandSnapshot } from "@/lib/search-demand";
-import { analysisPlan, seasonalPeaks, type QueryAnalysis } from '@/lib/query-analysis';
-import { QueryAnalysisCharts } from './query-analysis-charts';
+import { normalizeDemandQuery, shiftMonth } from "@/lib/search-demand";
+import { seasonalPeaks } from '@/lib/query-analysis';
+import { queryDemandRows, type QueryDemandHistory } from '@/lib/query-demand';
 import { HelpTip } from './help-tip';
 
-type Reply = { snapshot?: DemandSnapshot | null; connected?: boolean; canUpdate?: boolean; canConnect?: boolean; storageReady?: boolean; error?: string; warning?: string; cached?: boolean; saved?: boolean };
+type Reply = { connected?: boolean; canUpdate?: boolean; canConnect?: boolean; storageReady?: boolean; error?: string; warning?: string; cached?: boolean; saved?: boolean };
 const number = (v: number) => Math.round(v).toLocaleString("ru-RU");
 const date = (v: string | number) => new Date(v).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const month = (v: string) => new Date(v + "-01").toLocaleDateString("ru-RU", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -20,32 +20,33 @@ const month = (v: string) => new Date(v + "-01").toLocaleDateString("ru-RU", { m
 export function SearchDemand({ initialQuery = "кофемашина" }: { initialQuery?: string; lockedQuery?: boolean }) {
   const id = useId(), token = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialQuery), [query, setQuery] = useState(normalizeDemandQuery(initialQuery));
-  const [snapshot, setSnapshot] = useState<DemandSnapshot | null>(null);
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false), [canUpdate, setCanUpdate] = useState(false), [storageReady, setStorageReady] = useState(false);
   const [canConnect, setCanConnect] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false), [remember, setRemember] = useState(false), [message, setMessage] = useState("");
-  const [report, setReport] = useState<QueryAnalysis | null>(null);
-  const [chartPeriod, setChartPeriod] = useState({ from: '', to: '' });
-  const stop = useRef(false), autoAnalyze = useRef('');
+  const [history, setHistory] = useState<QueryDemandHistory | null>(null);
+  const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
+  const generation = useRef(0), autoAnalyze = useRef('');
   useEffect(() => { setDraft(initialQuery); setQuery(normalizeDemandQuery(initialQuery)); }, [initialQuery]);
   useEffect(() => {
     const abort = new AbortController();
-    stop.current = false;
-    setLoading(true); setReady(false); setSnapshot(null); setReport(null); setMessage("");
+    generation.current++;
+    setLoading(true); setReady(false); setHistory(null); setPending(false); setMessage("");
     if (query.length < 2) { setLoading(false); return; }
     void fetch(`/api/search-demand?query=${encodeURIComponent(query)}`, { signal: abort.signal, cache: "no-store" }).then(async r => {
       const data = await r.json() as Reply;
       if (!r.ok) throw new Error(data.error || "Не удалось открыть историю.");
       if (abort.signal.aborted) return;
-      setSnapshot(data.snapshot ?? null); setConnected(!!data.connected); setCanUpdate(!!data.canUpdate); setStorageReady(!!data.storageReady); setReady(true);
+      setConnected(!!data.connected); setCanUpdate(!!data.canUpdate); setStorageReady(!!data.storageReady);
       setCanConnect(!!data.canConnect);
-      const saved = await fetch(`/api/query-analysis?query=${encodeURIComponent(query)}`, { signal: abort.signal, cache: 'no-store' });
-      const analysis = await saved.json() as { report?: QueryAnalysis | null };
-      if (!abort.signal.aborted && saved.ok) setReport(analysis.report ?? null);
+      const saved = await fetch(`/api/query-demand?query=${encodeURIComponent(query)}`, { signal: abort.signal, cache: 'no-store' });
+      const analysis = await saved.json() as { history?: QueryDemandHistory | null; pending?: boolean; error?: string };
+      if (!saved.ok) throw Error(analysis.error || 'Не удалось открыть историю товаров.');
+      if (!abort.signal.aborted) { setHistory(analysis.history ?? null); setPending(!!analysis.pending); setMessage(analysis.history?.warning ?? ''); setReady(true); }
     }).catch(e => { if (!abort.signal.aborted) setMessage(e instanceof Error ? e.message : "Не удалось открыть историю."); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
-    return () => { abort.abort(); stop.current = true; };
+    return () => { abort.abort(); generation.current++; };
   }, [query]);
 
   function chooseQuery(e: FormEvent) {
@@ -62,40 +63,52 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     // loadApi intentionally runs only after the newly selected query has opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, query]);
-  async function loadApi(action: "load" | "refresh") {
-    if (busy || !ready) return;
-    if (!connected && !token.current?.value) { if (canConnect) setKeyOpen(true); else setMessage('Владелец должен подключить MPStats, после этого вы сможете запускать анализ.'); return; }
-    setBusy(true); setMessage(""); stop.current = false;
+  async function loadApi(action: "load" | "refresh" | "resume") {
+    if (inFlight.current || !ready) return;
+    if (!connected && !token.current?.value && !(action === 'load' && history?.complete)) {
+      if (canConnect) setKeyOpen(true); else setMessage('Владелец должен подключить MPStats.');
+      return;
+    }
+    const run = generation.current;
+    inFlight.current = true;
+    setBusy(true); setMessage("");
     let oneTimeToken = token.current?.value ?? '';
-    const body = JSON.stringify({ query, action, ...(oneTimeToken ? { token: oneTimeToken, remember } : {}) });
     if (token.current) token.current.value = "";
     try {
-      const r = await fetch("/api/search-demand", { method: "POST", headers: { "Content-Type": "application/json" }, body });
-      const data = await r.json() as Reply;
-      if (!r.ok) throw new Error(data.error || "Не удалось получить данные MPStats.");
-      if (data.snapshot) { setSnapshot(data.snapshot); }
-      setConnected(!!data.connected); setKeyOpen(false);
-      if (data.saved === false) throw Error(data.warning || 'История не сохранена. Повторите загрузку.');
-      let finished = false;
-      for (let step = 0; step < 180 && !stop.current; step++) {
-        const response = await fetch('/api/query-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, action: step === 0 && report && !report.tasks.some(t => t.state === 'pending') ? 'retry' : 'step', ...(oneTimeToken ? { token: oneTimeToken } : {}) }) });
-        const result = await response.json() as { report: QueryAnalysis; error?: string; halt?: boolean; finished?: boolean };
-        if (!response.ok) throw Error(result.error || 'Не удалось продолжить анализ.');
-        setReport(result.report);
-        if (result.halt) { setMessage('Один из отчётов недоступен. Полученные данные сохранены. Нажмите «Продолжить анализ», чтобы перейти к остальным отчётам.'); break; }
-        if (result.finished) { finished = true; break; }
+      // Preserve the existing, revision-checked connection setup only when asked.
+      // A normal analysis uses the direct SEO report exclusively.
+      if (oneTimeToken && remember) {
+        const connection = await fetch('/api/search-demand', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, action: 'load', token: oneTimeToken, remember: true }) });
+        const result = await connection.json() as Reply;
+        if (!connection.ok || !result.connected) throw Error(result.error || result.warning || 'Не удалось сохранить подключение.');
+        if (run !== generation.current) return;
+        setConnected(true);
       }
-      if (finished) setMessage('Анализ сохранён. Графики и выбор периода работают без повторных обращений к MPStats.');
-      else if (!stop.current) setMessage(previous => previous || 'Полученные отчёты сохранены. Нажмите «Продолжить анализ», чтобы загрузить остальные.');
-      else if (stop.current) setMessage('Загрузка приостановлена. Полученные отчёты сохранены; можно продолжить позже.');
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Не удалось получить ответ. Сохранённая история остаётся на странице."); }
-    finally { oneTimeToken = ''; setBusy(false); }
+      setKeyOpen(false);
+      let nextAction = action;
+      // Six bounded batches, at most 36 monthly reports. No retry after an error.
+      for (let batch = 0; batch < 6; batch++) {
+        const response = await fetch('/api/query-demand', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, action: nextAction, ...(oneTimeToken ? { token: oneTimeToken } : {}) }) });
+        const result = await response.json() as { history?: QueryDemandHistory; error?: string; cached?: boolean; pending?: boolean };
+        if (run !== generation.current) return;
+        if (result.history) setHistory(result.history);
+        setPending(!!result.pending || result.history?.complete === false);
+        if (!response.ok) throw Error(result.error || 'Не удалось получить историю запроса.');
+        if (!result.history) throw Error('В ответе нет сохранённого графика.');
+        if (result.history.complete) {
+          setMessage(result.cached ? 'Открыт сохранённый график. Новых обращений к MPStats нет.' : 'График сохранён: 36 месячных отчётов по запросу, без артикула.');
+          return;
+        }
+        setMessage('Сохранено месяцев: ' + result.history.points.length + ' из 36. Загружаем остальные…');
+        nextAction = 'resume';
+      }
+    } catch (e) {
+      if (run === generation.current) setMessage(e instanceof Error ? e.message : 'Не удалось завершить загрузку. Полученные месяцы сохранены.');
+    } finally { oneTimeToken = ''; inFlight.current = false; setBusy(false); }
   }
-  const planned = snapshot ? analysisPlan(snapshot, new Date().toISOString()).tasks.length : null;
-  const completed = report?.tasks.filter(t => t.state === 'done').length ?? 0;
-  const pending = report?.tasks.filter(t => t.state === 'pending').length ?? 0;
-  const failed = report?.tasks.filter(t => t.state === 'error').length ?? 0;
-  const buttonLabel = busy ? 'Анализируем…' : draft.trim() && normalizeDemandQuery(draft) !== query ? 'Анализировать запрос' : report ? pending ? `Продолжить анализ · ${pending}` : failed ? `Повторить недоступные · ${failed}` : 'Дополнить анализ' : 'Анализировать запрос';
+  const buttonLabel = busy ? 'Загружаем график…' : 'Анализировать запрос';
   return <section className="demand-panel" aria-label="История спроса по запросу">
     <header className="demand-heading"><div><p className="demand-eyebrow">MPStats · Wildberries</p><h2>Анализ запроса</h2></div></header>
     <form onSubmit={chooseQuery} className="demand-search">
@@ -105,17 +118,18 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     </form>
     {canUpdate && ready && <Dialog open={keyOpen} onOpenChange={open => { if (!busy) setKeyOpen(open); }}><DialogContent><DialogHeader><DialogTitle>Подключение MPStats</DialogTitle><DialogDescription>Для загрузки новой истории нужен API-токен.</DialogDescription></DialogHeader><div className="demand-key-form"><label htmlFor={id + "-token"}>API-токен MPStats</label><Input id={id + "-token"} ref={token} type="password" autoComplete="new-password" spellCheck={false} autoCapitalize="none" placeholder="Вставьте токен из настроек MPStats" maxLength={1000} disabled={busy} /><label className="demand-remember"><Checkbox checked={remember} onCheckedChange={v => setRemember(v === true)} disabled={!storageReady || busy} />Сохранить подключение для следующих запросов</label><p>Ключ хранится зашифрованным. Без галочки он используется только для этой загрузки.</p>{message && <p role="status">{message}</p>}<Button disabled={busy} onClick={() => void loadApi("refresh")}>{busy ? "Загружаем…" : "Загрузить историю"}</Button></div></DialogContent></Dialog>}
     {message && <p className="demand-message" role="status">{message}</p>}
-    <p className="query-analysis-cost flex items-center gap-1.5">{planned ? `План: до ${planned} частей анализа · сохранённые шаги не повторяются.` : 'Глубина анализа зависит от доступной истории.'}<HelpTip label="Как загружается анализ">Получаем всю доступную историю частотности и отчёты от её начала до последнего завершённого месяца. После каждого ответа состояние сохраняется, поэтому при продолжении уже готовые шаги повторно не запрашиваются. Списание лимитов определяется тарифом MPStats.</HelpTip></p>
-    {report && <div className="query-analysis-progress"><span>Готово: {completed} / {report.tasks.length}{pending ? ` · осталось ${pending}` : ''}{failed ? ` · ошибок ${failed}` : ''}</span>{busy && <Button size="sm" variant="outline" onClick={() => { stop.current = true; }}>Приостановить</Button>}{report.tasks.some(t => t.state === 'error') && <details><summary>Не удалось загрузить</summary>{report.tasks.filter(t => t.state === 'error').map(t => <p key={t.id}>{t.from} — {t.to}: {t.error}</p>)}</details>}</div>}
+    <p className="query-analysis-cost flex items-center gap-1.5">Только спрос и товары · остальные отчёты отключены<HelpTip label="Расход запросов">Сохранённые данные открываются без API. Первая загрузка — до 36 месячных отчётов «Подбор запросов». Каждый месяц сохраняется отдельно; после сбоя продолжаем с недостающего. Повторное открытие и смена периода не расходуют API. При сохранении нового подключения дополнительно проверяется история частотности. Лидеры, реклама и продажи не загружаются. Списание квоты зависит от тарифа.</HelpTip></p>
+    {canUpdate && <details className="demand-table-details"><summary>Источник и обновление</summary><p>MPStats → Подбор запросов. Для каждого месяца выбираем 1-е число следующего месяца. Частотность WB и результаты по всем страницам берутся из одной строки точного запроса. Артикул не нужен.</p><Button variant="outline" disabled={!ready || busy || loading} onClick={() => void loadApi('refresh')}>Обновить данные · до 36 вызовов API</Button></details>}
     {loading && <p className="demand-empty" role="status">Открываем сохранённую историю…</p>}
-    {!loading && !snapshot && <div className="demand-empty"><ChartNoAxesCombined className="size-8" /><h3>История ещё не загружена</h3><p>Здесь появятся месячный график и таблица частотности.</p>{!canUpdate && ready && <p>Загрузить историю может владелец.</p>}{!ready && <Button variant="outline" onClick={() => window.location.reload()}>Повторить</Button>}</div>}
-    {snapshot && <><DemandHistory key={snapshot.fetchedAt + query} snapshot={snapshot} report={report} onPeriodChange={setChartPeriod} />{chartPeriod.from && chartPeriod.to && chartPeriod.from <= chartPeriod.to && <QueryAnalysisCharts snapshot={snapshot} report={report} period={chartPeriod} />}</>}
+    {canUpdate && (pending || history?.complete === false) && <Button variant="outline" disabled={!ready || busy} onClick={() => void loadApi('resume')}>Продолжить загрузку недостающих месяцев</Button>}
+    {!loading && !history && <div className="demand-empty"><ChartNoAxesCombined className="size-8" /><h3>История ещё не загружена</h3><p>Здесь появятся частотность, количество результатов WB и частотность на товар за три года.</p>{!canUpdate && ready && <p>Загрузить историю может владелец.</p>}{!ready && <Button variant="outline" onClick={() => window.location.reload()}>Повторить</Button>}</div>}
+    {history && <DemandHistory key={query} history={history} />}
   </section>;
 }
 
-export function DemandHistory({ snapshot, report = null, onPeriodChange }: { snapshot: DemandSnapshot; report?: QueryAnalysis | null; onPeriodChange?: (period: { from: string; to: string }) => void }) {
+export function DemandHistory({ history }: { history: QueryDemandHistory }) {
   const id = useId();
-  const months = useMemo(() => demandMonthSnapshots(snapshot.points, snapshot.fetchedAt), [snapshot]);
+  const months = useMemo(() => queryDemandRows(history), [history]);
   const firstMonth = months[0]?.month ?? "";
   const lastMonth = months.at(-1)?.month ?? "";
   const defaultFrom = lastMonth ? [firstMonth, shiftMonth(lastMonth, -35)].sort().at(-1)! : "";
@@ -123,7 +137,6 @@ export function DemandHistory({ snapshot, report = null, onPeriodChange }: { sna
   const [custom, setCustom] = useState({ from: defaultFrom, to: lastMonth });
   const period = range === "3" ? { from: defaultFrom, to: lastMonth } : custom;
   const validPeriod = /^\d{4}-(0[1-9]|1[0-2])$/.test(period.from) && /^\d{4}-(0[1-9]|1[0-2])$/.test(period.to) && period.from <= period.to && period.from >= firstMonth && period.to <= lastMonth;
-  useEffect(() => { onPeriodChange?.(validPeriod ? { from: period.from, to: period.to } : { from: "", to: "" }); }, [period.from, period.to, validPeriod, onPeriodChange]);
   const visibleMonths = validPeriod ? months.filter(m => m.month >= period.from && m.month <= period.to) : [];
   const peaks = seasonalPeaks(months).filter(p => p.month >= period.from && p.month <= period.to);
   const peakGrowth = (() => {
@@ -135,11 +148,8 @@ export function DemandHistory({ snapshot, report = null, onPeriodChange }: { sna
     return elapsed >= 8 && elapsed <= 16 && distance <= 2 ? { previous, current, ratio: current.frequency / previous.frequency } : null;
   })();
   const hasValues = visibleMonths.some(m => m.frequency != null);
-  const showItems = !!report?.months.some(m => m.items != null);
-  const series = visibleMonths.map(m => {
-    const items = report?.months.find(row => row.month === m.month)?.items ?? null;
-    return { ...m, items, perItem: m.frequency != null && items ? m.frequency / items : null };
-  });
+  const showItems = true;
+  const series = visibleMonths;
 
   return <>
     <div className="demand-toolbar">
@@ -156,15 +166,16 @@ export function DemandHistory({ snapshot, report = null, onPeriodChange }: { sna
       </div>}
     </div>
     {!months.length ? <p className="demand-empty" role="status">Пока нет замеров на границах завершённых месяцев.</p> : !validPeriod ? <p className="demand-message" role="alert">Выберите период внутри доступной истории. Первый месяц должен быть не позже последнего.</p> : !hasValues ? <p className="demand-empty" role="status">За выбранный период данных нет.</p> : <>
-      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Частотность по месяцам <HelpTip label="Частотность по месяцам">Значение берётся на границе завершённого месяца: 1-е число следующего месяца, либо ближайший предыдущий замер не старше 6 дней. Это скользящий показатель MPStats, не точная сумма запросов за календарный месяц. Сезонный пик отмечается только после широкого устойчивого роста и подтверждённого снижения; короткие всплески и незавершённый рост пиками не считаются. Если показаны товары, «частотность на товар» — ориентировочное отношение двух показателей, не продажи на карточку.</HelpTip></h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
-      <div className="demand-chart" role="img" aria-label={`Частотность запроса «${snapshot.query}» по месяцам. Значения в таблице ниже.`}>
+      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Спрос и товары по запросу <HelpTip label="Методика графика">Источник — «Подбор запросов» MPStats, точное совпадение текста запроса. Для месяца используем отчёт на 1-е число следующего месяца: частотность WB за предыдущие 30 дней и количество результатов по всем страницам (не товары первой страницы). На товар = частотность / результаты WB. Это не сумма за календарный месяц. Даты не сдвигаем и пробелы не заполняем соседними значениями.</HelpTip></h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
+      <p className="demand-updated">Данные по запросу: {series.filter(m => m.paired).length} из {series.length} месяцев. Прочерк — отчёт ещё не загружен или запрос не найден на эту дату.</p>
+      <div className="demand-chart" role="img" aria-label={`Частотность запроса «${history.query}» по месяцам. Значения в таблице ниже.`}>
         <ResponsiveContainer width="100%" height="100%"><ComposedChart data={series} margin={{ top: 20, right: 16, bottom: 8, left: 0 }} accessibilityLayer>
           <defs><linearGradient id={id + "-fill"} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563eb" stopOpacity={.16}/><stop offset="100%" stopColor="#2563eb" stopOpacity={.01}/></linearGradient></defs>
           <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e4e9e4" />
           <XAxis dataKey="month" interval="preserveStartEnd" minTickGap={35} tickFormatter={month} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#69756d" }} />
-          <YAxis yAxisId="count" width={54} tickFormatter={v => Intl.NumberFormat("ru-RU", { notation: "compact" }).format(v)} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#69756d" }} />
+          <YAxis yAxisId="count" width={72} tickFormatter={v => Intl.NumberFormat("ru-RU", { notation: "compact" }).format(v)} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#69756d" }} />
           {showItems && <YAxis yAxisId="ratio" orientation="right" width={36} axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />}
-          <Tooltip labelFormatter={label => month(String(label))} formatter={(value, name, item) => [typeof value === 'number' ? (name === 'Частотность' && item.payload.approximate ? '≈ ' : '') + value.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) : '—', name]} />
+          <Tooltip labelFormatter={(label, payload) => { const point = payload?.[0]?.payload; return month(String(label)) + (point?.sourceDate ? ` · отчёт ${date(point.sourceDate)}` : ''); }} formatter={(value, name) => [typeof value === 'number' ? value.toLocaleString('ru-RU', { maximumFractionDigits: name === 'Частотность на товар' ? 2 : 0 }) : '—', name]} />
           <Area yAxisId="count" name="Частотность" type="linear" dataKey="frequency" stroke="#2563eb" strokeWidth={2.5} fill={`url(#${id}-fill)`} connectNulls={false} isAnimationActive={false} dot={visibleMonths.length === 1 ? { r: 5 } : false} activeDot={{ r: 5 }} />
           {peaks.map(p => <ReferenceDot key={p.month} yAxisId="count" x={p.month} y={p.frequency} r={5} fill="#d97706" stroke="white" strokeWidth={2} />)}
           {showItems && <><Line yAxisId="count" type="linear" dataKey="items" name="Товаров" stroke="#15803d" strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} /><Line yAxisId="ratio" type="linear" dataKey="perItem" name="Частотность на товар" stroke="#d97706" strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} /><Legend /></>}
@@ -172,12 +183,12 @@ export function DemandHistory({ snapshot, report = null, onPeriodChange }: { sna
       </div>
       {peaks.length > 0 && <div className="query-peak-grid">{peaks.map(p => <div key={p.month}><span>Сезонный пик</span><strong>{number(p.frequency)}</strong><small>{month(p.month)} · рост с {month(p.from)}</small></div>)}</div>}
       {peakGrowth && <p className="query-peak-growth">Пик {month(peakGrowth.current.month)} к {month(peakGrowth.previous.month)}: <b>×{peakGrowth.ratio.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b>.</p>}
-      <details className="demand-table-details" open><summary>Данные по месяцам</summary>
-        <div className="demand-table-scroll"><table><thead><tr><th scope="col">Месяц</th><th scope="col">Частотность</th>{showItems && <><th>Товаров</th><th>На товар</th></>}</tr></thead>
-          <tbody>{series.map(m => <tr key={m.month}><td>{month(m.month)}{m.frequency == null && <small>Нет замера на границе месяца</small>}</td><td>{m.frequency == null ? "—" : <span title={`Замер на ${date(m.sourceDate!)}`}>{m.approximate ? "≈ " : ""}{number(m.frequency)}</span>}</td>{showItems && <><td>{m.items == null ? '—' : number(m.items)}</td><td>{m.perItem == null ? '—' : m.perItem.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}</td></>}</tr>)}</tbody>
+      <details className="demand-table-details"><summary>Данные по месяцам</summary>
+        <div className="demand-table-scroll"><table><thead><tr><th scope="col">Месяц</th><th scope="col">Дата отчёта</th><th scope="col">Частотность</th><th scope="col">Товаров</th><th scope="col">На товар</th></tr></thead>
+          <tbody>{series.map(m => <tr key={m.month}><td>{month(m.month)}{!m.paired && <small>{m.loaded ? 'Нет строки запроса в отчёте' : 'Ещё не загружено'}</small>}</td><td>{m.sourceDate ? date(m.sourceDate) : '—'}</td><td>{m.frequency == null ? "—" : number(m.frequency)}</td><td>{m.items == null ? '—' : number(m.items)}</td><td>{m.perItem == null ? '—' : m.perItem.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</td></tr>)}</tbody>
         </table></div>
       </details>
     </>}
-    <p className="demand-updated">MPStats · Обновлено {date(snapshot.fetchedAt)}</p>
+    <p className="demand-updated">MPStats · Подбор запросов · Загружено: {date(history.fetchedAt)}</p>
   </>;
 }
