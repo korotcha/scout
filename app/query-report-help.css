@@ -1,0 +1,34 @@
+/* Methodology help stays readable on hover, keyboard focus and touch. */
+.query-help-content {
+  width: min(440px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(72dvh, var(--radix-tooltip-content-available-height, 72dvh));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.query-help-dialog {
+  display: flex;
+  flex-direction: column;
+  width: calc(100vw - 32px);
+  max-width: 640px;
+  max-height: calc(100dvh - 48px);
+}
+.query-help-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; font-size: 14px; line-height: 1.65; }
+.query-report-explanation { display: grid; gap: 14px; text-align: left; }
+.query-report-explanation dt { font-weight: 650; margin-bottom: 3px; }
+.query-report-explanation dd { margin: 0; font-weight: 400; }
+.query-report-guide { margin-top: 24px; padding: 16px 0; border-top: 1px solid var(--border); font-size: 14px; line-height: 1.65; }
+.query-report-guide > summary { cursor: pointer; font-weight: 600; }
+.query-report-guide > p { margin-top: 12px; max-width: 900px; }
+.query-report-guide-status { color: var(--muted-foreground); }
+.query-report-guide > ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; padding: 0; list-style: none; }
+.query-report-guide li { padding: 16px; min-width: 0; border: 1px solid var(--border); border-radius: 6px; }
+.query-report-guide-heading { display: flex; align-items: center; gap: 8px; }
+.query-report-guide-heading h3 { font-size: 15px; font-weight: 600; line-height: 1.5; }
+.query-report-guide li p { margin-top: 6px; color: var(--muted-foreground); }
+@media (max-width: 700px) {
+  .query-report-guide > ul { grid-template-columns: 1fr; }
+  .query-help-trigger { min-width: 32px; min-height: 32px; }
+}

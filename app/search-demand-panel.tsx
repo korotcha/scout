@@ -11,6 +11,7 @@ import { normalizeDemandQuery, shiftMonth } from "@/lib/search-demand";
 import { seasonalPeaks } from '@/lib/query-analysis';
 import { queryDemandRows, type QueryDemandHistory } from '@/lib/query-demand';
 import { HelpTip } from './help-tip';
+import { QueryReportGuide, ReportHelp } from './query-report-help';
 
 type Reply = { connected?: boolean; canUpdate?: boolean; canConnect?: boolean; storageReady?: boolean; error?: string; warning?: string; cached?: boolean; saved?: boolean };
 const number = (v: number) => Math.round(v).toLocaleString("ru-RU");
@@ -124,6 +125,7 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     {canUpdate && (pending || history?.complete === false) && <Button variant="outline" disabled={!ready || busy} onClick={() => void loadApi('resume')}>Продолжить загрузку недостающих месяцев</Button>}
     {!loading && !history && <div className="demand-empty"><ChartNoAxesCombined className="size-8" /><h3>История ещё не загружена</h3><p>Здесь появятся частотность, количество результатов WB и частотность на товар за три года.</p>{!canUpdate && ready && <p>Загрузить историю может владелец.</p>}{!ready && <Button variant="outline" onClick={() => window.location.reload()}>Повторить</Button>}</div>}
     {history && <DemandHistory key={query} history={history} />}
+    <QueryReportGuide />
   </section>;
 }
 
@@ -166,7 +168,8 @@ export function DemandHistory({ history }: { history: QueryDemandHistory }) {
       </div>}
     </div>
     {!months.length ? <p className="demand-empty" role="status">Пока нет замеров на границах завершённых месяцев.</p> : !validPeriod ? <p className="demand-message" role="alert">Выберите период внутри доступной истории. Первый месяц должен быть не позже последнего.</p> : !hasValues ? <p className="demand-empty" role="status">За выбранный период данных нет.</p> : <>
-      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Спрос и товары по запросу <HelpTip label="Методика графика">Источник — «Подбор запросов» MPStats, точное совпадение текста запроса. Для месяца используем отчёт на 1-е число следующего месяца: частотность WB за предыдущие 30 дней и количество результатов по всем страницам (не товары первой страницы). На товар = частотность / результаты WB. Это не сумма за календарный месяц. Даты не сдвигаем и пробелы не заполняем соседними значениями.</HelpTip></h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
+      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Спрос и товары по запросу <ReportHelp kind="demand" /></h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
+      <p className="demand-updated">Анализируем запрос «{history.query}», а не весь рынок категории. Узкая фраза может уточнить выборку, но не гарантирует другой состав товаров.</p>
       <p className="demand-updated">Данные по запросу: {series.filter(m => m.paired).length} из {series.length} месяцев. Прочерк — отчёт ещё не загружен или запрос не найден на эту дату.</p>
       <div className="demand-chart" role="img" aria-label={`Частотность запроса «${history.query}» по месяцам. Значения в таблице ниже.`}>
         <ResponsiveContainer width="100%" height="100%"><ComposedChart data={series} margin={{ top: 20, right: 16, bottom: 8, left: 0 }} accessibilityLayer>
