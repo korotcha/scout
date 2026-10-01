@@ -26,7 +26,7 @@ export function QueryReportGuide() {
   return <details className="query-report-guide">
     <summary>Как читать отчёты по запросу</summary>
     <p>{QUERY_REPORT_SCOPE}</p>
-    <p className="query-report-guide-status">Сейчас подключён график спроса и товаров. Ниже — памятка по шести отчётам; остальные данные пока не загружаются. Наведите на «?» или нажмите, чтобы прочитать методику.</p>
+    <p className="query-report-guide-status">Ниже — памятка по шести отчётам. Дополнительные данные загружаются отдельной кнопкой за выбранные месяцы; открытие подсказок не расходует API. Наведите на «?» или нажмите, чтобы прочитать методику.</p>
     <ul>{(Object.keys(QUERY_REPORT_HELP) as QueryReportKind[]).map(kind => <li key={kind}>
       <div className="query-report-guide-heading"><h3>{QUERY_REPORT_HELP[kind].title}</h3><ReportHelp kind={kind} /></div>
       <p>{QUERY_REPORT_HELP[kind].purpose}</p>

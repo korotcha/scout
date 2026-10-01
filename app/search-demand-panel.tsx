@@ -12,6 +12,7 @@ import { seasonalPeaks } from '@/lib/query-analysis';
 import { queryDemandRows, type QueryDemandHistory } from '@/lib/query-demand';
 import { HelpTip } from './help-tip';
 import { QueryReportGuide, ReportHelp } from './query-report-help';
+import { QueryItemsPanel } from './query-items-panel';
 
 type Reply = { connected?: boolean; canUpdate?: boolean; canConnect?: boolean; storageReady?: boolean; error?: string; warning?: string; cached?: boolean; saved?: boolean };
 const number = (v: number) => Math.round(v).toLocaleString("ru-RU");
@@ -119,12 +120,13 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     </form>
     {canUpdate && ready && <Dialog open={keyOpen} onOpenChange={open => { if (!busy) setKeyOpen(open); }}><DialogContent><DialogHeader><DialogTitle>Подключение MPStats</DialogTitle><DialogDescription>Для загрузки новой истории нужен API-токен.</DialogDescription></DialogHeader><div className="demand-key-form"><label htmlFor={id + "-token"}>API-токен MPStats</label><Input id={id + "-token"} ref={token} type="password" autoComplete="new-password" spellCheck={false} autoCapitalize="none" placeholder="Вставьте токен из настроек MPStats" maxLength={1000} disabled={busy} /><label className="demand-remember"><Checkbox checked={remember} onCheckedChange={v => setRemember(v === true)} disabled={!storageReady || busy} />Сохранить подключение для следующих запросов</label><p>Ключ хранится зашифрованным. Без галочки он используется только для этой загрузки.</p>{message && <p role="status">{message}</p>}<Button disabled={busy} onClick={() => void loadApi("refresh")}>{busy ? "Загружаем…" : "Загрузить историю"}</Button></div></DialogContent></Dialog>}
     {message && <p className="demand-message" role="status">{message}</p>}
-    <p className="query-analysis-cost flex items-center gap-1.5">Только спрос и товары · остальные отчёты отключены<HelpTip label="Расход запросов">Сохранённые данные открываются без API. Первая загрузка — до 36 месячных отчётов «Подбор запросов». Каждый месяц сохраняется отдельно; после сбоя продолжаем с недостающего. Повторное открытие и смена периода не расходуют API. При сохранении нового подключения дополнительно проверяется история частотности. Лидеры, реклама и продажи не загружаются. Списание квоты зависит от тарифа.</HelpTip></p>
+    <p className="query-analysis-cost flex items-center gap-1.5">Спрос — из SEO · остальные пять отчётов загружаются отдельной кнопкой ниже<HelpTip label="Расход запросов">Сохранённые данные открываются без MPStats. Первый график — до 36 отчётов «Подбор запросов». Остальные пять графиков используют общий список карточек за каждый выбранный месяц: от одного вызова на месяц, дополнительные страницы при более чем 500 карточках. Смена периода не запускает загрузку. Списание квоты зависит от тарифа.</HelpTip></p>
     {canUpdate && <details className="demand-table-details"><summary>Источник и обновление</summary><p>MPStats → Подбор запросов. Для каждого месяца выбираем 1-е число следующего месяца. Частотность WB и результаты по всем страницам берутся из одной строки точного запроса. Артикул не нужен.</p><Button variant="outline" disabled={!ready || busy || loading} onClick={() => void loadApi('refresh')}>Обновить данные · до 36 вызовов API</Button></details>}
     {loading && <p className="demand-empty" role="status">Открываем сохранённую историю…</p>}
     {canUpdate && (pending || history?.complete === false) && <Button variant="outline" disabled={!ready || busy} onClick={() => void loadApi('resume')}>Продолжить загрузку недостающих месяцев</Button>}
     {!loading && !history && <div className="demand-empty"><ChartNoAxesCombined className="size-8" /><h3>История ещё не загружена</h3><p>Здесь появятся частотность, количество результатов WB и частотность на товар за три года.</p>{!canUpdate && ready && <p>Загрузить историю может владелец.</p>}{!ready && <Button variant="outline" onClick={() => window.location.reload()}>Повторить</Button>}</div>}
     {history && <DemandHistory key={query} history={history} />}
+    {ready && <QueryItemsPanel key={'items:' + query} query={query} canUpdate={canUpdate} />}
     <QueryReportGuide />
   </section>;
 }

@@ -35,7 +35,7 @@ test('help is mounted in the active page and cannot enable disabled paid reports
   assert.ok(panel.includes('<QueryReportGuide />'));
   assert.ok(!panel.includes('/api/query-analysis'));
   assert.ok(!guide.includes('fetch('));
-  assert.match(guide, /остальные данные пока не загружаются/);
+  assert.match(guide, /Дополнительные данные загружаются отдельной кнопкой/);
   assert.match(guide, /<details/);
 });
 
