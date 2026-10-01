@@ -44,10 +44,13 @@ export async function POST(request: Request) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return json({ error: 'Недопустимый источник запроса.' }, 403);
   if (!request.headers.get('content-type')?.startsWith('application/json')) return json({ error: 'Неверный формат.' }, 400);
   let input;
-  try { input = z.object({ query: querySchema, month: monthSchema, action: z.literal('load') }).strict().safeParse(JSON.parse(await readLimited(request.body, 2000))); }
+  try { input = z.object({ query: querySchema, month: monthSchema, action: z.literal('load'),
+    token: z.string().min(20).max(1000).regex(/^[A-Za-z0-9._-]+$/).optional() }).strict().safeParse(JSON.parse(await readLimited(request.body, 4000))); }
   catch { return json({ error: 'Не удалось прочитать запрос.' }, 400); }
   if (!input.success) return json({ error: 'Проверьте запрос и завершённый месяц.' }, 400);
+  if (input.data.token && request.headers.get('oai-authenticated-user-email')?.toLowerCase() !== 'korotcha@yandex.ru') return json({ error: 'Подключением управляет владелец.' }, 403);
   const { query, month } = input.data;
+  if (input.data.token && query.includes(input.data.token.toLowerCase())) return json({ error: 'В поле запроса не должно быть ключа.' }, 400);
   const base = await prefix(query), key = base + month + '.json', leaseId = crypto.randomUUID(), db = getRawDb();
   let leased = false, upstreamRequests = 0;
   try {
@@ -59,7 +62,7 @@ export async function POST(request: Request) {
     const saved = await read(base, month), previous = await read(base, shiftMonth(month, -1));
     if (saved?.complete) return json({ row: row(month, saved, previous), cached: true, requests: 0 });
     const connection = await db.prepare("SELECT encrypted_key FROM api_connections WHERE provider = 'mpstats'").first<{ encrypted_key: string }>();
-    const token = process.env.MPSTATS_API_KEY || (connection?.encrypted_key ? await decryptKey(connection.encrypted_key, process.env.INTEGRATION_ENCRYPTION_KEY ?? process.env.SCOUT_PASSWORD ?? '', 'market-radar:mpstats:v1') : '');
+    const token = input.data.token ?? (process.env.MPSTATS_API_KEY || (connection?.encrypted_key ? await decryptKey(connection.encrypted_key, process.env.INTEGRATION_ENCRYPTION_KEY ?? process.env.SCOUT_PASSWORD ?? '', 'market-radar:mpstats:v1') : ''));
     if (!token) return json({ error: 'Сначала сохраните подключение MPStats в настройках.' }, 400);
     if (query.includes(token.toLowerCase())) return json({ error: 'В поле запроса не должно быть ключа.' }, 400);
     upstreamRequests = 1;
@@ -71,6 +74,7 @@ export async function POST(request: Request) {
     const error = e instanceof Error && /^(MPStats |В ответе MPStats|Не удалось прочитать отчёт)/.test(e.message) ? e.message : 'Не удалось сохранить отчёт. Ранее сохранённые месяцы доступны.';
     return json({ error, requests: upstreamRequests }, 502);
   } finally {
+    input.data.token = undefined;
     if (leased) await db.prepare('UPDATE query_analysis_jobs SET lease_until = NULL, lease_id = NULL WHERE query_key = ? AND lease_id = ?').bind(key, leaseId).run().catch(() => {});
   }
 }

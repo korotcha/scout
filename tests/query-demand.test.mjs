@@ -133,5 +133,7 @@ test('graph UI has no reference SKU requirement, preserves one bounded loading f
  const source=readFileSync(new URL('../app/search-demand-panel.tsx',import.meta.url),'utf8');
  assert.ok(!source.includes('referenceSku'));assert.ok(!source.includes('/api/query-analysis'));
  assert.ok(source.includes('batch < 6'));assert.ok(source.includes('inFlight.current'));
- assert.ok(source.includes('Подбор запросов'));assert.ok(source.includes('Продолжить загрузку недостающих месяцев'));
+ assert.ok(source.includes('Подбор запросов'));assert.ok(source.includes('Продолжить анализ'));
+ assert.ok(source.includes("pending ? 'resume' : 'refresh'"));
+ assert.ok(source.includes('await items.load(oneTimeToken)'));
 });

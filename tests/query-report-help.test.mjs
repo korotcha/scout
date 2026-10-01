@@ -28,11 +28,11 @@ test('risk indicators do not promise auction prices, newcomer success or actual 
   assert.match(QUERY_REPORT_HELP.competition.calculation, /supplier_id/);
 });
 
-test('help is mounted in the active page and cannot enable disabled paid reports', () => {
+test('minimal reports hide the lengthy guide and help buttons without deleting methodology', () => {
   const panel = readFileSync(new URL('../app/search-demand-panel.tsx', import.meta.url), 'utf8');
   const guide = readFileSync(new URL('../app/query-report-help.tsx', import.meta.url), 'utf8');
-  assert.ok(panel.includes('<ReportHelp kind="demand" />'));
-  assert.ok(panel.includes('<QueryReportGuide />'));
+  assert.ok(!panel.includes('<ReportHelp'));
+  assert.ok(!panel.includes('<QueryReportGuide'));
   assert.ok(!panel.includes('/api/query-analysis'));
   assert.ok(!guide.includes('fetch('));
   assert.match(guide, /Дополнительные данные загружаются отдельной кнопкой/);

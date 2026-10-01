@@ -80,6 +80,8 @@ test('API validates authentication, origin, dates, range and strict fields befor
   assert.equal((await post({}, {'oai-authenticated-user-email':''})).status,401);
   assert.equal((await post({}, {origin:'https://evil.test'})).status,403);
   for(const body of [{month:'2030-01'},{month:'2026-13'},{sku:'123'},{action:'refresh'}]) assert.equal((await post(body)).status,400);
+  assert.equal((await post({token:'temporary-test-key-12345'}, {'oai-authenticated-user-email':'reader@test.com'})).status,403);
+  assert.equal((await post({query:'temporary-test-key-12345',token:'temporary-test-key-12345'})).status,400);
   assert.equal((await api.GET(new Request('https://app.test/api/query-items?query=x&from=2026-08&to=2026-09'))).status,401);
 });
 test('API one upstream page builds five reports, persists them and rereads without tokens or calls', async () => {
@@ -114,10 +116,24 @@ test('pagination checkpoints, lease, 429 and storage failure never publish parti
     failSave=false;const complete=await(await post()).json();assert.equal(complete.row.received,501);assert.equal(complete.row.loaded,true);
   } finally { globalThis.fetch=original;failSave=false;leased=false;if(oldToken===undefined)delete process.env.MPSTATS_API_KEY;else process.env.MPSTATS_API_KEY=oldToken; }
 });
+test('owner one-time token is accepted for the unified analysis but is never persisted', async () => {
+  objects.clear(); const original = globalThis.fetch;
+  const token = 'temporary-test-key-12345';
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(options.headers['X-Mpstats-TOKEN'], token);
+    return Response.json(response(0));
+  };
+  try {
+    const r = await post({token}); assert.equal(r.status, 200);
+    assert.ok(!(await r.text()).includes(token));
+    assert.ok(![...objects.values()].some(v => v.includes(token)));
+  } finally { globalThis.fetch = original; }
+});
 test('UI mounts all five reports, no auto-paid fetch on mount, stops runs and preserves gaps',()=>{
   const ui=readFileSync(new URL('../app/query-items-panel.tsx',import.meta.url),'utf8');
   assert.equal((ui.match(/<Group title=/g)||[]).length,5);
   assert.ok(ui.includes('connectNulls={false}'));assert.ok(ui.includes('flight.current'));assert.ok(ui.includes('steps++ >= 40'));
-  assert.ok(ui.includes('Смена периода только читает кэш'));assert.ok(!ui.includes('localStorage'));
-  assert.ok(readFileSync(new URL('../app/search-demand-panel.tsx',import.meta.url),'utf8').includes("<QueryItemsPanel key={'items:' + query}"));
+  assert.ok(ui.includes('The form is the sole upstream trigger'));assert.ok(!ui.includes('localStorage'));
+  assert.ok(!ui.includes('query-items-controls')); assert.ok(!ui.includes('ReportHelp'));
+  assert.ok(readFileSync(new URL('../app/search-demand-panel.tsx',import.meta.url),'utf8').includes('<QueryItemsPanel rows={visibleItems}'));
 });

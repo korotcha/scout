@@ -1,10 +1,13 @@
 .query-items-panel { display: grid; gap: 20px; min-width: 0; margin-top: 28px; }
-.query-items-controls { border: 1px solid #dce1dc; padding: 20px; border-radius: 6px; display: grid; gap: 12px; }
-.query-items-controls > h3 { font-weight: 600; font-size: 18px; }
-.query-items-controls p, .query-items-note { color: #56625b; line-height: 1.55; font-size: 14px; }
-.query-items-range { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
-.query-items-range label { display: grid; gap: 5px; min-width: 150px; }
-.query-items-controls > button { justify-self: start; white-space: normal; height: auto; min-height: 40px; }
+.query-period-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; margin: 16px 0 24px; }
+.query-period-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.query-period-presets button { padding: 8px 12px; border: 1px solid #dce1dc; border-radius: 5px; background: white; font-size: 14px; cursor: pointer; }
+.query-period-presets button[aria-pressed="true"] { background: #eef2ee; border-color: #8a978e; color: #182c20; }
+.query-period-presets button:focus-visible, .query-period-custom select:focus-visible { outline: 2px solid #15803d; outline-offset: 2px; }
+.query-period-custom { display: flex; flex-wrap: wrap; gap: 12px; }
+.query-period-custom fieldset { display: flex; gap: 6px; min-width: 0; border: 0; padding: 0; }
+.query-period-custom legend { font-size: 12px; color: #56625b; margin-bottom: 4px; }
+.query-period-custom select { min-height: 38px; border: 1px solid #dce1dc; border-radius: 5px; padding: 6px 10px; background: white; font-size: 14px; }
 .query-items-heading { display: flex; align-items: center; gap: 8px; }
 .query-items-panel .query-chart-card { min-width: 0; }
 .query-items-plot { min-width: 0; margin-top: 20px; }
@@ -12,4 +15,4 @@
 .query-items-panel .query-chart-canvas { height: 310px; width: 100%; min-width: 0; }
 .query-items-panel summary { cursor: pointer; padding: 10px 0; }
 .query-items-panel td small { display: block; color: #6b7280; font-size: 11px; }
-@media (max-width: 640px) { .query-items-controls { padding: 12px; } .query-items-range label { min-width: 0; flex: 1 1 130px; } .query-items-panel .query-chart-canvas { height: 280px; } }
+@media (max-width: 640px) { .query-items-panel .query-chart-canvas { height: 280px; } }

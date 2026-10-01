@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { normalizeDemandQuery, shiftMonth } from "@/lib/search-demand";
+import { normalizeDemandQuery } from "@/lib/search-demand";
 import { seasonalPeaks } from '@/lib/query-analysis';
 import { queryDemandRows, type QueryDemandHistory } from '@/lib/query-demand';
-import { HelpTip } from './help-tip';
-import { QueryReportGuide, ReportHelp } from './query-report-help';
-import { QueryItemsPanel } from './query-items-panel';
+import { QueryItemsPanel, useQueryItems } from './query-items-panel';
+import { QueryPeriodPicker } from './query-period-picker';
+import { analysisPeriod, displayPeriod, validDisplayPeriod, type QueryPeriod, type PeriodPreset } from '@/lib/query-period';
+import { reportMonths } from '@/lib/query-items';
 
 type Reply = { connected?: boolean; canUpdate?: boolean; canConnect?: boolean; storageReady?: boolean; error?: string; warning?: string; cached?: boolean; saved?: boolean };
 const number = (v: number) => Math.round(v).toLocaleString("ru-RU");
@@ -28,6 +28,13 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
   const [keyOpen, setKeyOpen] = useState(false), [remember, setRemember] = useState(false), [message, setMessage] = useState("");
   const [history, setHistory] = useState<QueryDemandHistory | null>(null);
   const [pending, setPending] = useState(false);
+  const [full] = useState(() => analysisPeriod());
+  const [preset, setPreset] = useState<PeriodPreset>('36');
+  const [custom, setCustom] = useState<QueryPeriod>(full);
+  const period = displayPeriod(preset, custom, full);
+  const items = useQueryItems(query, full, ready);
+  const visibleItems = items.rows.filter(r => r.month >= period.from && r.month <= period.to);
+  const coverage = visibleItems.filter(r => r.loaded).length;
   const inFlight = useRef(false);
   const generation = useRef(0), autoAnalyze = useRef('');
   useEffect(() => { setDraft(initialQuery); setQuery(normalizeDemandQuery(initialQuery)); }, [initialQuery]);
@@ -55,13 +62,13 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     e.preventDefault(); if (busy || loading) return;
     const normalized = normalizeDemandQuery(draft);
     if (normalized.length < 2) return;
-    if (normalized !== query) { autoAnalyze.current = normalized; setQuery(normalized); return; }
-    void loadApi('load');
+    if (normalized !== query) { autoAnalyze.current = normalized; setReady(false); setLoading(true); setQuery(normalized); return; }
+    if (canUpdate) void loadApi(pending ? 'resume' : 'refresh');
   }
   useEffect(() => {
     if (!ready || busy || autoAnalyze.current !== query) return;
     autoAnalyze.current = '';
-    void loadApi('load');
+    if (canUpdate) void loadApi(pending ? 'resume' : 'refresh');
     // loadApi intentionally runs only after the newly selected query has opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, query]);
@@ -78,7 +85,7 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
     if (token.current) token.current.value = "";
     try {
       // Preserve the existing, revision-checked connection setup only when asked.
-      // A normal analysis uses the direct SEO report exclusively.
+      // SEO refreshes on analysis; item reports only fill missing cached months.
       if (oneTimeToken && remember) {
         const connection = await fetch('/api/search-demand', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, action: 'load', token: oneTimeToken, remember: true }) });
@@ -100,7 +107,10 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
         if (!response.ok) throw Error(result.error || 'Не удалось получить историю запроса.');
         if (!result.history) throw Error('В ответе нет сохранённого графика.');
         if (result.history.complete) {
-          setMessage(result.cached ? 'Открыт сохранённый график. Новых обращений к MPStats нет.' : 'График сохранён: 36 месячных отчётов по запросу, без артикула.');
+          setMessage('Спрос сохранён. Загружаем остальные графики…');
+          const calls = await items.load(oneTimeToken);
+          if (run !== generation.current) return;
+          setMessage(calls ? 'Анализ сохранён за три года.' : 'SEO обновлено; остальные отчёты открыты из сохранённых данных.');
           return;
         }
         setMessage('Сохранено месяцев: ' + result.history.points.length + ' из 36. Загружаем остальные…');
@@ -110,7 +120,7 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
       if (run === generation.current) setMessage(e instanceof Error ? e.message : 'Не удалось завершить загрузку. Полученные месяцы сохранены.');
     } finally { oneTimeToken = ''; inFlight.current = false; setBusy(false); }
   }
-  const buttonLabel = busy ? 'Загружаем график…' : 'Анализировать запрос';
+  const buttonLabel = busy ? 'Анализируем…' : pending ? 'Продолжить анализ' : 'Анализировать';
   return <section className="demand-panel" aria-label="История спроса по запросу">
     <header className="demand-heading"><div><p className="demand-eyebrow">MPStats · Wildberries</p><h2>Анализ запроса</h2></div></header>
     <form onSubmit={chooseQuery} className="demand-search">
@@ -119,29 +129,25 @@ export function SearchDemand({ initialQuery = "кофемашина" }: { initia
       {canUpdate ? <Button className="query-analyze-button" type="submit" disabled={!ready || busy || loading || normalizeDemandQuery(draft).length < 2}>{busy ? <LoaderCircle className="size-5 animate-spin" /> : <Sparkles className="size-5" />}{buttonLabel}</Button> : <Button variant="secondary" type="submit" disabled={busy || loading}>Открыть запрос</Button>}
     </form>
     {canUpdate && ready && <Dialog open={keyOpen} onOpenChange={open => { if (!busy) setKeyOpen(open); }}><DialogContent><DialogHeader><DialogTitle>Подключение MPStats</DialogTitle><DialogDescription>Для загрузки новой истории нужен API-токен.</DialogDescription></DialogHeader><div className="demand-key-form"><label htmlFor={id + "-token"}>API-токен MPStats</label><Input id={id + "-token"} ref={token} type="password" autoComplete="new-password" spellCheck={false} autoCapitalize="none" placeholder="Вставьте токен из настроек MPStats" maxLength={1000} disabled={busy} /><label className="demand-remember"><Checkbox checked={remember} onCheckedChange={v => setRemember(v === true)} disabled={!storageReady || busy} />Сохранить подключение для следующих запросов</label><p>Ключ хранится зашифрованным. Без галочки он используется только для этой загрузки.</p>{message && <p role="status">{message}</p>}<Button disabled={busy} onClick={() => void loadApi("refresh")}>{busy ? "Загружаем…" : "Загрузить историю"}</Button></div></DialogContent></Dialog>}
-    {message && <p className="demand-message" role="status">{message}</p>}
-    <p className="query-analysis-cost flex items-center gap-1.5">Спрос — из SEO · остальные пять отчётов загружаются отдельной кнопкой ниже<HelpTip label="Расход запросов">Сохранённые данные открываются без MPStats. Первый график — до 36 отчётов «Подбор запросов». Остальные пять графиков используют общий список карточек за каждый выбранный месяц: от одного вызова на месяц, дополнительные страницы при более чем 500 карточках. Смена периода не запускает загрузку. Списание квоты зависит от тарифа.</HelpTip></p>
-    {canUpdate && <details className="demand-table-details"><summary>Источник и обновление</summary><p>MPStats → Подбор запросов. Для каждого месяца выбираем 1-е число следующего месяца. Частотность WB и результаты по всем страницам берутся из одной строки точного запроса. Артикул не нужен.</p><Button variant="outline" disabled={!ready || busy || loading} onClick={() => void loadApi('refresh')}>Обновить данные · до 36 вызовов API</Button></details>}
+    {(items.message || message) && <p className="demand-message" role="status">{items.message || message}</p>}
+    <QueryPeriodPicker preset={preset} custom={custom} full={full} onPreset={setPreset} onCustom={setCustom} />
     {loading && <p className="demand-empty" role="status">Открываем сохранённую историю…</p>}
-    {canUpdate && (pending || history?.complete === false) && <Button variant="outline" disabled={!ready || busy} onClick={() => void loadApi('resume')}>Продолжить загрузку недостающих месяцев</Button>}
     {!loading && !history && <div className="demand-empty"><ChartNoAxesCombined className="size-8" /><h3>История ещё не загружена</h3><p>Здесь появятся частотность, количество результатов WB и частотность на товар за три года.</p>{!canUpdate && ready && <p>Загрузить историю может владелец.</p>}{!ready && <Button variant="outline" onClick={() => window.location.reload()}>Повторить</Button>}</div>}
-    {history && <DemandHistory key={query} history={history} />}
-    {ready && <QueryItemsPanel key={'items:' + query} query={query} canUpdate={canUpdate} />}
-    <QueryReportGuide />
+    {history && <DemandHistory key={query} history={history} period={period} full={full} />}
+    {ready && <>
+      {items.reading ? <p className="demand-updated" role="status">Открываем сохранённые отчёты…</p> : coverage < visibleItems.length && <p className="demand-updated" role="status">Дополнительные отчёты: {coverage} из {visibleItems.length} месяцев. {busy ? 'Загрузка продолжается.' : 'Нажмите «Анализировать», чтобы дополнить историю.'}</p>}
+      <QueryItemsPanel rows={visibleItems} />
+    </>}
   </section>;
 }
 
-export function DemandHistory({ history }: { history: QueryDemandHistory }) {
+export function DemandHistory({ history, period, full }: { history: QueryDemandHistory; period: QueryPeriod; full: QueryPeriod }) {
   const id = useId();
   const months = useMemo(() => queryDemandRows(history), [history]);
-  const firstMonth = months[0]?.month ?? "";
-  const lastMonth = months.at(-1)?.month ?? "";
-  const defaultFrom = lastMonth ? [firstMonth, shiftMonth(lastMonth, -35)].sort().at(-1)! : "";
-  const [range, setRange] = useState("3");
-  const [custom, setCustom] = useState({ from: defaultFrom, to: lastMonth });
-  const period = range === "3" ? { from: defaultFrom, to: lastMonth } : custom;
-  const validPeriod = /^\d{4}-(0[1-9]|1[0-2])$/.test(period.from) && /^\d{4}-(0[1-9]|1[0-2])$/.test(period.to) && period.from <= period.to && period.from >= firstMonth && period.to <= lastMonth;
-  const visibleMonths = validPeriod ? months.filter(m => m.month >= period.from && m.month <= period.to) : [];
+  const validPeriod = validDisplayPeriod(period, full);
+  const visibleMonths = validPeriod ? reportMonths(period.from, period.to).map(month => months.find(m => m.month === month) ?? {
+    month, sourceDate: null, frequency: null, items: null, perItem: null, paired: false, loaded: false,
+  }) : [];
   const peaks = seasonalPeaks(months).filter(p => p.month >= period.from && p.month <= period.to);
   const peakGrowth = (() => {
     if (peaks.length < 2) return null;
@@ -156,23 +162,9 @@ export function DemandHistory({ history }: { history: QueryDemandHistory }) {
   const series = visibleMonths;
 
   return <>
-    <div className="demand-toolbar">
-      <div className="demand-period-picker">
-        <label htmlFor={id + "-period"}>Период</label>
-        <Select value={range} onValueChange={setRange}>
-          <SelectTrigger id={id + "-period"} aria-label="Период графика"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="3">Последние 3 года</SelectItem><SelectItem value="custom">Свой период</SelectItem></SelectContent>
-        </Select>
-      </div>
-      {range === "custom" && <div className="demand-month-inputs">
-        <label htmlFor={id + "-from"}><span>С</span><Input id={id + "-from"} aria-label="Первый месяц периода" type="month" value={custom.from} min={firstMonth} max={custom.to || lastMonth} onInput={e => { const from = e.currentTarget.value; setCustom(previous => ({ ...previous, from })); }} /></label>
-        <label htmlFor={id + "-to"}><span>По</span><Input id={id + "-to"} aria-label="Последний месяц периода" type="month" value={custom.to} min={custom.from || firstMonth} max={lastMonth} onInput={e => { const to = e.currentTarget.value; setCustom(previous => ({ ...previous, to })); }} /></label>
-      </div>}
-    </div>
     {!months.length ? <p className="demand-empty" role="status">Пока нет замеров на границах завершённых месяцев.</p> : !validPeriod ? <p className="demand-message" role="alert">Выберите период внутри доступной истории. Первый месяц должен быть не позже последнего.</p> : !hasValues ? <p className="demand-empty" role="status">За выбранный период данных нет.</p> : <>
-      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Спрос и товары по запросу <ReportHelp kind="demand" /></h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
-      <p className="demand-updated">Анализируем запрос «{history.query}», а не весь рынок категории. Узкая фраза может уточнить выборку, но не гарантирует другой состав товаров.</p>
-      <p className="demand-updated">Данные по запросу: {series.filter(m => m.paired).length} из {series.length} месяцев. Прочерк — отчёт ещё не загружен или запрос не найден на эту дату.</p>
+      <div className="demand-chart-heading"><h3 className="flex items-center gap-1.5">Спрос и товары по запросу</h3><span>{month(visibleMonths[0].month)} — {month(visibleMonths.at(-1)!.month)}</span></div>
+      {series.filter(m => m.paired).length < series.length && <p className="demand-updated">Данные: {series.filter(m => m.paired).length} из {series.length} месяцев. Прочерк — нет данных.</p>}
       <div className="demand-chart" role="img" aria-label={`Частотность запроса «${history.query}» по месяцам. Значения в таблице ниже.`}>
         <ResponsiveContainer width="100%" height="100%"><ComposedChart data={series} margin={{ top: 20, right: 16, bottom: 8, left: 0 }} accessibilityLayer>
           <defs><linearGradient id={id + "-fill"} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563eb" stopOpacity={.16}/><stop offset="100%" stopColor="#2563eb" stopOpacity={.01}/></linearGradient></defs>
